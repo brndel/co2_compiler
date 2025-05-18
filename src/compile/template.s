@@ -13,4 +13,3 @@ syscall
 
 
 _main:
-# CODE STARTING 

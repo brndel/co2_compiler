@@ -152,7 +152,7 @@ impl<'a> Analyzed<'a> {
             _ => unimplemented!(),
         };
 
-        if let Err(err) = u32::from_str_radix(value, radix) {
+        if let Err(err) = i32::from_str_radix(value, radix) {
             if err.kind() == &IntErrorKind::PosOverflow {
                 Err(SemanticError::IntOverflow { ident: *ident })
             } else {
