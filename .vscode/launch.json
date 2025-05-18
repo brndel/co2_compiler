@@ -21,7 +21,7 @@
             },
             "args": [
                 "sample.co2",
-                "out/result.bin"
+                "output/result.bin"
             ],
             "cwd": "${workspaceFolder}"
         },

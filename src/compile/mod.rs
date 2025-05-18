@@ -5,7 +5,12 @@ pub fn compile_code(output: impl AsRef<Path>) {
     let input_file_path = output.as_ref().with_extension("s");
     let ouput_file_path = output.as_ref().with_extension("bin");
 
-    let assembly = include_str!("template.s").to_string();
+    let mut assembly = include_str!("template.s").to_string();
+
+    assembly += "
+movq $42, %rax
+ret
+";
 
     fs::write(&input_file_path, assembly).unwrap();
 
@@ -15,8 +20,6 @@ pub fn compile_code(output: impl AsRef<Path>) {
         .arg(input_file_path)
         .arg("-o")
         .arg(ouput_file_path)
-        .arg("-nostdlib")
-        .arg("-static")
         .spawn()
         .unwrap();
 
@@ -28,4 +31,3 @@ pub fn compile_code(output: impl AsRef<Path>) {
 pub fn compile_code(output: impl AsRef<Path>) {
     panic!("can't compile code on non x86_64 machines")
 }
-
