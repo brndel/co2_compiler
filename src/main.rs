@@ -14,7 +14,7 @@ use ariadne::{Cache, Color, Label, Report, ReportKind, sources};
 use chumsky::{Parser, input::Input, prelude::todo, span::SimpleSpan};
 use compile::compile_code;
 use lexer::lexer;
-use parser::program_parser;
+use parser::{program_parser, ParseNum};
 use program::Program;
 use semantic::Analyzed;
 
@@ -41,16 +41,23 @@ fn main() {
     let analyzed = analyze_program(program, source);
 
     let Some(analyzed) = analyzed else {
-        println!("ANALYZE ERROR");
+        println!("Semantic analyzer failed");
         exit(7);
     };
 
-    println!("ANALYZED SUCESS");
+    println!("Semantic analyzer passed");
 
-    compile_code(args.output_file);
+    let ssa = ssa::to_ssa(analyzed.program.statements);
+
+    for (idx, instr) in ssa.iter().enumerate() {
+        println!("{:3}: {}", idx, instr);
+    }
+
+
+    // compile_code(args.output_file);
 }
 
-fn parse_file<'a>(source: SourceFile<'a>) -> Option<Program<'a>> {
+fn parse_file<'a>(source: SourceFile<'a>) -> Option<Program<'a, ParseNum<'a>>> {
     let (tokens, lex_errors) = lexer().parse(source.content).into_output_errors();
 
     let (program, parse_errors) = if let Some(tokens) = &tokens {
@@ -97,7 +104,7 @@ fn parse_file<'a>(source: SourceFile<'a>) -> Option<Program<'a>> {
     program
 }
 
-fn analyze_program<'a>(program: Program<'a>, source: SourceFile<'a>) -> Option<Analyzed<'a>> {
+fn analyze_program<'a>(program: Program<'a, ParseNum<'a>>, source: SourceFile<'a>) -> Option<Analyzed<'a>> {
     match Analyzed::new(program) {
         Ok(analyzed) => Some(analyzed),
         Err(errors) => {

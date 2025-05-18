@@ -13,10 +13,10 @@ use crate::{
     program::Program,
 };
 
-use super::ast::{Expression, Statement};
+use super::{ast::{Expression, Statement}, ParseNum};
 
 pub fn program_parser<'token, 'src: 'token, I>()
--> impl Parser<'token, I, Program<'src>, extra::Err<Rich<'token, Token<'src>, SimpleSpan>>>
+-> impl Parser<'token, I, Program<'src, ParseNum<'src>>, extra::Err<Rich<'token, Token<'src>, SimpleSpan>>>
 where
     I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
 {
@@ -42,15 +42,15 @@ where
 }
 
 pub fn parse_statements<'token, 'src: 'token, I>()
--> impl Parser<'token, I, Vec<Statement<'src>>, extra::Err<Rich<'token, Token<'src>, SimpleSpan>>>
+-> impl Parser<'token, I, Vec<Statement<'src, ParseNum<'src>>>, extra::Err<Rich<'token, Token<'src>, SimpleSpan>>>
 where
     I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
 {
     let expr = recursive(|expr| {
         let value = select! {
             Token::Ident(ident) = e => Expression::Ident((ident, e.span())),
-            Token::DecNum(num) = e => Expression::DecNum((num, e.span())),
-            Token::HexNum(num) = e => Expression::HexNum((num, e.span())),
+            Token::DecNum(num) = e => Expression::Num(ParseNum::Dec((num, e.span()))),
+            Token::HexNum(num) = e => Expression::Num(ParseNum::Hex((num, e.span()))),
         }
         .labelled("value")
         .as_context();

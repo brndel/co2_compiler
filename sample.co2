@@ -1,22 +1,12 @@
 int main() {
-    int a;
-    a = 5;
+    int a = 10;
 
-    // Comment
-    int x;
-    
-    x = 5;
-
-    (((x))) += 5;
+    int x = 5;
+    x += 1;
 
     int b = a * 5 + 10;
 
-    int z = (0x10Fa + x * (-10));
-
-    z %= 64 * 10  * (z * 7);
-
-    int too_big_hex = 0xFFFFFAFF;
-    int too_big_dec = 999999;
+    int z = (a + x * -10);
 
     return 5+7*z;
 }

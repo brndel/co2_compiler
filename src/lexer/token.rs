@@ -35,10 +35,32 @@ pub enum Operator {
     Mod,
 }
 
+impl Display for Operator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Operator::Plus => write!(f, "+"),
+            Operator::Minus => write!(f, "-"),
+            Operator::Mul => write!(f, "*"),
+            Operator::Div => write!(f, "/"),
+            Operator::Mod => write!(f, "%"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnaryOperator {
     Minus,
 }
+
+
+impl Display for UnaryOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnaryOperator::Minus => write!(f, "-"),
+        }
+    }
+}
+
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Keyword {
