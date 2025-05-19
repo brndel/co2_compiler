@@ -20,7 +20,7 @@
                 }
             },
             "args": [
-                "sample.co2",
+                "tests/sample.co2",
                 "output/result.bin"
             ],
             "cwd": "${workspaceFolder}"
