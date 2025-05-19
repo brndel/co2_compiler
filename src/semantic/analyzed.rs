@@ -184,23 +184,58 @@ impl<'a> Analyzed<'a> {
     }
 
     fn parse(num: ParseNum<'a>) -> Result<Spanned<i32>, SemanticError<'a>> {
-        let (value, radix, ident) = match num {
-            ParseNum::Dec(ident) => (ident.0, 10, ident),
-            ParseNum::Hex(ident) => (ident.0.strip_prefix("0x").unwrap(), 16, ident),
-        };
-
-        match i32::from_str_radix(value, radix) {
-            Ok(value) => Ok((value, ident.1)),
-            Err(err) => {
-                if err.kind() == &IntErrorKind::PosOverflow {
-                    Err(SemanticError::IntOverflow { ident })
-                } else {
-                    panic!(
-                        "unexpected int error while parsing {:?}: {:?}",
-                        ident.0, err
-                    )
+        match num {
+            ParseNum::Dec(ident) => match i32::from_str_radix(ident.0, 10) {
+                Ok(value) => Ok((value, ident.1)),
+                Err(err) => {
+                    if err.kind() == &IntErrorKind::PosOverflow {
+                        Err(SemanticError::IntOverflow { ident })
+                    } else {
+                        panic!(
+                            "unexpected int error while parsing {:?}: {:?}",
+                            ident.0, err
+                        )
+                    }
                 }
-            }
+            },
+            ParseNum::Hex(ident) => {
+                let value = ident.0.strip_prefix("0x").expect("Hex num missing 0x prefix");
+                match u32::from_str_radix(value, 16) {
+                            Ok(value) => {
+                                let value = i32::from_be_bytes(value.to_be_bytes());
+                                Ok((value, ident.1))
+                            },
+                            Err(err) => {
+                                if err.kind() == &IntErrorKind::PosOverflow {
+                                    Err(SemanticError::IntOverflow { ident })
+                                } else {
+                                    panic!(
+                                        "unexpected int error while parsing {:?}: {:?}",
+                                        ident.0, err
+                                    )
+                                }
+                            }
+                        }
+            },
         }
+
+        // let (value, radix, ident) = match num {
+        //     ParseNum::Dec(ident) => (ident.0, 10, ident),
+        //     ParseNum::Hex(ident) => (ident.0.strip_prefix("0x").unwrap(), 16, ident),
+        // };
+
+        // match i32::from_str_radix(value, radix) {
+        //     Ok(value) => Ok((value, ident.1)),
+        //     Err(err) => {
+        //         if err.kind() == &IntErrorKind::PosOverflow {
+        //             Err(SemanticError::IntOverflow { ident })
+        //         } else {
+        //             panic!(
+        //                 "unexpected int error while parsing {:?}: {:?}",
+        //                 ident.0, err
+        //             )
+        //         }
+        //     }
+        // }
     }
 }
