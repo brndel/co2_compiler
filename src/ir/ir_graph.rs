@@ -3,6 +3,8 @@ use std::{
     fmt::Display,
 };
 
+use chumsky::container::Seq;
+
 use crate::ssa::{SsaInstruction, VirtualRegister};
 
 use super::LiveSet;
@@ -41,6 +43,56 @@ impl<'a> IrGraph<'a> {
             self.edges.entry(b).or_default().insert(a);
         }
     }
+
+    fn max_cardinal_ordering(&self) -> Vec<VirtualRegister> {
+        
+        let mut ordered_registers = Vec::new();
+        let mut registers = self.vertices.keys().cloned().map(|key| (key, 0_usize)).collect::<BTreeMap<_, _>>();
+
+        while let Some(register) =  Self::pop_highest(&mut registers) {
+            ordered_registers.push(register);
+
+            if let Some(neighbors) = self.edges.get(&register) {
+                for neighbor in neighbors {
+                    registers.entry(*neighbor).and_modify(|weight| *weight += 1);
+                }
+            }
+
+        }
+
+        ordered_registers
+    }
+
+    fn pop_highest(registers: &mut BTreeMap<VirtualRegister<'a>, usize>) -> Option<VirtualRegister<'a>> {
+            let (&register, _) = registers.iter().max_by_key(|(k, weight)| *weight)?;
+
+            registers.remove(&register);
+
+            Some(register)
+    }
+
+    pub fn greedy_coloring<T: GraphColor + Ord>(&'a self) -> BTreeMap<VirtualRegister<'a>, T> {
+        let mut color_map = BTreeMap::new();
+
+        let ordered_registers = self.max_cardinal_ordering();
+
+        for register in ordered_registers {
+            
+            let neighbors = self.edges.get(&register);
+
+            let neighbor_colors = neighbors.iter().flat_map(|neighbors| neighbors.iter()).filter_map(|reg| color_map.get(reg)).collect::<BTreeSet<_>>();
+
+            for color in T::ascending_iter() {
+                if !neighbor_colors.contains(&color) {
+                    color_map.insert(register, color);
+                    break;
+                }
+            }
+        }
+
+
+        color_map
+    }
 }
 
 impl<'a> Display for IrGraph<'a> {
@@ -66,4 +118,8 @@ impl<'a> Display for IrGraph<'a> {
 
         Ok(())
     }
+}
+
+pub trait GraphColor {
+    fn ascending_iter() -> impl Iterator<Item = Self>;
 }

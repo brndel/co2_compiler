@@ -1,14 +1,38 @@
 use std::fmt::Display;
 
+use crate::ir::GraphColor;
+
 pub enum Instruction {
-    Move { src: Value, dst: Register },
-    Add { reg: Register, value: Value },
-    Sub { reg: Register, value: Value },
-    Mul { reg: Register, value: Value },
-    Negate { reg: Register },
-    Div { register: NumRegister, value: NumRegister },
-    Mod { register: NumRegister, value: NumRegister },
-    Return { register: Register },
+    Move {
+        src: Value,
+        dst: Register,
+    },
+    Add {
+        reg: Register,
+        value: Value,
+    },
+    Sub {
+        reg: Register,
+        value: Value,
+    },
+    Mul {
+        reg: Register,
+        value: Value,
+    },
+    Negate {
+        reg: Register,
+    },
+    Div {
+        register: NumRegister,
+        value: NumRegister,
+    },
+    Mod {
+        register: NumRegister,
+        value: NumRegister,
+    },
+    Return {
+        register: Register,
+    },
 }
 
 impl Display for Instruction {
@@ -31,14 +55,12 @@ impl Display for Instruction {
                 writeln!(f, "idiv {}", value)?;
                 write!(f, "movl {}, {}", Register::Edx, register)
             }
-            Instruction::Return {
-                register
-            } => {
+            Instruction::Return { register } => {
                 if register != &Register::Eax {
                     writeln!(f, "mov {}, {}", Register::Eax, register)?;
                 }
                 write!(f, "ret")
-            },
+            }
         }
     }
 }
@@ -57,16 +79,17 @@ impl Display for Value {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Register {
     Eax,
     Ebx,
     Ecx,
     Edx,
     Num(NumRegister),
+    Stack(StackRegister),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NumRegister {
     R8,
     R9,
@@ -78,9 +101,18 @@ pub enum NumRegister {
     R15,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct StackRegister(u32);
+
 impl From<NumRegister> for Register {
     fn from(value: NumRegister) -> Self {
         Self::Num(value)
+    }
+}
+
+impl From<StackRegister> for Register {
+    fn from(value: StackRegister) -> Self {
+        Self::Stack(value)
     }
 }
 
@@ -92,6 +124,7 @@ impl Display for Register {
             Register::Ecx => write!(f, "%ecx"),
             Register::Edx => write!(f, "%edx"),
             Register::Num(num_register) => num_register.fmt(f),
+            Register::Stack(stack_register) => stack_register.fmt(f),
         }
     }
 }
@@ -108,5 +141,27 @@ impl Display for NumRegister {
             NumRegister::R14 => write!(f, "%r14d"),
             NumRegister::R15 => write!(f, "%r15d"),
         }
+    }
+}
+
+impl Display for StackRegister {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "-{}(%ebp)", self.0)
+    }
+}
+
+impl GraphColor for Register {
+    fn ascending_iter() -> impl Iterator<Item = Self> {
+        [
+            Register::Num(NumRegister::R8),
+            Register::Num(NumRegister::R9),
+            Register::Num(NumRegister::R10),
+            Register::Num(NumRegister::R11),
+            Register::Num(NumRegister::R12),
+            Register::Num(NumRegister::R13),
+            Register::Num(NumRegister::R14),
+            Register::Num(NumRegister::R15),
+        ]
+        .into_iter().chain((0..).map(|i| Register::Stack(StackRegister(i))))
     }
 }

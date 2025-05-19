@@ -1,12 +1,12 @@
 mod instruction;
 
+pub use instruction::Register;
+
+use instruction::{Instruction, NumRegister, Value};
 use std::path::Path;
+use std::{fmt::Write, fs, process::Command};
 
-#[cfg(target_arch = "x86_64")]
 pub fn compile_code(output: impl AsRef<Path>) {
-    use instruction::{Instruction, NumRegister, Register, Value};
-    use std::{fmt::Write, fs, process::Command};
-
     let input_file_path = output.as_ref().with_extension("s");
     let ouput_file_path = output.as_ref().with_extension("bin");
 
@@ -36,24 +36,26 @@ pub fn compile_code(output: impl AsRef<Path>) {
 
     fs::write(&input_file_path, assembly).expect("could not write to temp .s file");
 
-    println!("STARTING GCC");
+    #[cfg(target_arch = "x86_64")]
+    {
+        let mut gcc = Command::new("gcc")
+            .arg(input_file_path)
+            .arg("-o")
+            .arg(&ouput_file_path)
+            .spawn()
+            .expect("could not start gcc command");
 
-    let mut gcc = Command::new("gcc")
-        .arg(input_file_path)
-        .arg("-o")
-        .arg(&ouput_file_path)
-        .spawn()
-        .expect("could not start gcc command");
+        gcc.wait().expect("gcc wait failed");
 
-    gcc.wait().expect("gcc wait failed");
-    println!("DONE");
+        let status = Command::new(ouput_file_path)
+            .output()
+            .expect("failed to run binary");
 
-    let status = Command::new(ouput_file_path).output().expect("failed to run binary");
+        println!("binary result: {}", status.status);
+    }
 
-    println!("binary result: {}", status.status);
-}
-
-#[cfg(not(target_arch = "x86_64"))]
-pub fn compile_code(output: impl AsRef<Path>) {
-    panic!("can't compile code on non x86_64 machines")
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        println!("can't compile code on non x86_64 machines")
+    }
 }

@@ -12,7 +12,7 @@ use std::{fs::read_to_string, ops::Range, process::exit, vec};
 use args::get_args;
 use ariadne::{Cache, Color, Label, Report, ReportKind, sources};
 use chumsky::{Parser, input::Input, prelude::todo, span::SimpleSpan};
-use compile::compile_code;
+use compile::{compile_code, Register};
 use ir::{analyze_liveliness, IrGraph};
 use lexer::lexer;
 use parser::{program_parser, ParseNum};
@@ -52,7 +52,7 @@ fn main() {
 
     let ssa = ssa::to_ssa(analyzed.program.statements);
 
-    let liveliness = analyze_liveliness(ssa);
+    let liveliness = analyze_liveliness(ssa.clone());
 
     for (instr, live_set) in liveliness.iter() {
         let instr = instr.to_string();
@@ -62,6 +62,15 @@ fn main() {
     let ir_graph = IrGraph::new(liveliness);
 
     println!("{}", ir_graph);
+
+    let colors = ir_graph.greedy_coloring::<Register>();
+
+    for instr in ssa {
+        let color = instr.target().and_then(|target| colors.get(target));
+        let instr = instr.to_string();
+
+        println!("{:<25} {:?}", instr, color);
+    }
 
     // compile_code(args.output_file);
 
