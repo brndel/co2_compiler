@@ -51,6 +51,8 @@ fn main() {
 
     let ssa = ssa::to_ssa(analyzed.program.statements);
 
+    let ssa = ssa::remove_dead_code(ssa);
+
     let liveliness = analyze_liveliness(ssa.clone());
 
     #[cfg(debug_assertions)]
@@ -165,7 +167,7 @@ impl<'a> SourceFile<'a> {
         if span.start > span.end {
             swap(&mut span.start, &mut span.end);
         }
-        
+
         (self.path.to_string(), span.into_range())
     }
 }
