@@ -13,6 +13,7 @@ use args::get_args;
 use ariadne::{Cache, Color, Label, Report, ReportKind, sources};
 use chumsky::{Parser, input::Input, prelude::todo, span::SimpleSpan};
 use compile::compile_code;
+use ir::{analyze_liveliness, IrGraph};
 use lexer::lexer;
 use parser::{program_parser, ParseNum};
 use program::Program;
@@ -49,10 +50,16 @@ fn main() {
 
     let ssa = ssa::to_ssa(analyzed.program.statements);
 
-    for (idx, instr) in ssa.iter().enumerate() {
-        println!("{:3}: {}", idx, instr);
+    let liveliness = analyze_liveliness(ssa);
+
+    for (instr, live_set) in liveliness.iter() {
+        let instr = instr.to_string();
+        println!("{:<25} {}", instr, live_set);
     }
 
+    let ir_graph = IrGraph::new(liveliness);
+
+    println!("{}", ir_graph);
 
     // compile_code(args.output_file);
 }

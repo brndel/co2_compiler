@@ -4,6 +4,7 @@ use crate::lexer::{Operator, UnaryOperator};
 
 use super::register::VirtualRegister;
 
+#[derive(Debug, Clone, Copy)]
 pub enum SsaInstruction<'a> {
     Move {
         target: VirtualRegister<'a>,
@@ -25,6 +26,7 @@ pub enum SsaInstruction<'a> {
     },
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum SsaValue<'a> {
     Register(VirtualRegister<'a>),
     Immediate(i32),
@@ -50,4 +52,17 @@ impl<'a> Display for SsaInstruction<'a> {
             SsaInstruction::Return { value } => write!(f, "return {}", value),
         }
     }
+}
+
+impl<'a> SsaInstruction<'a> {
+
+    pub fn target(&self) -> Option<&VirtualRegister<'a>> {
+        match self {
+            SsaInstruction::Move { target, .. } => Some(target),
+            SsaInstruction::BinaryOp { target, .. } => Some(target),
+            SsaInstruction::UnaryOp { target, .. } => Some(target),
+            SsaInstruction::Return { .. } => None,
+        }
+    }
+
 }
