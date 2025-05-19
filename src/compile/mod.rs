@@ -22,6 +22,8 @@ pub fn compile_code(output: impl AsRef<Path>, instructions: Vec<Instruction>) {
 
     #[cfg(target_arch = "x86_64")]
     {
+        println!("starting gcc");
+
         let mut gcc = Command::new("gcc")
             .arg(input_file_path)
             .arg("-o")
@@ -30,8 +32,9 @@ pub fn compile_code(output: impl AsRef<Path>, instructions: Vec<Instruction>) {
             .expect("could not start gcc command");
 
         gcc.wait().expect("gcc wait failed");
+        println!("gcc done");
 
-        #[cfg(debug_assertions)]
+        // #[cfg(debug_assertions)]
         { // Only execute the program in debug mode
             let status = Command::new(ouput_file_path)
                 .output()
