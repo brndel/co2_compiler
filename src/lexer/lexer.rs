@@ -8,7 +8,7 @@ use chumsky::{
     prelude::{any, just, one_of, recursive},
     select,
     span::SimpleSpan,
-    text::{digits, ident, int, newline},
+    text::{digits, int, newline},
 };
 
 type Spanned<T> = (T, SimpleSpan);
@@ -16,7 +16,7 @@ type Spanned<T> = (T, SimpleSpan);
 pub fn lexer<'src>()
 -> impl Parser<'src, &'src str, Vec<Spanned<Token<'src>>>, extra::Err<Rich<'src, char, SimpleSpan>>>
 {
-    let ident_keyword = ident()
+    let ident_keyword = chumsky_fix::ident()
         .map(|s| {
             Keyword::from_str(s)
                 .map(Token::Keyword)
@@ -94,4 +94,62 @@ pub fn lexer<'src>()
         .padded_by(whitespace)
         .repeated()
         .collect()
+}
+
+mod chumsky_fix {
+
+    use chumsky::{
+        extra::ParserExtra, input::{SliceInput, StrInput}, label::LabelError, prelude::any, text::{Char, TextExpected}, util::MaybeRef, Parser
+    };
+
+    /// A parser that accepts a C-style identifier.
+    ///
+    /// The output type of this parser is [`SliceInput::Slice`] (i.e: [`&str`] when `I` is [`&str`], and [`&[u8]`] when `I` is
+    /// [`&[u8]`]).
+    ///
+    /// An identifier is defined as an ASCII alphabetic character or an underscore followed by any number of alphanumeric
+    /// characters or underscores. The regex pattern for it is `[a-zA-Z_][a-zA-Z0-9_]*`.
+    #[must_use]
+    pub fn ident<'src, I, E>()
+    -> impl Parser<'src, I, <I as SliceInput<'src>>::Slice, E> + Copy
+    where
+        I: StrInput<'src>,
+        I::Token: Char + 'src,
+        E: ParserExtra<'src, I>,
+        E::Error: LabelError<'src, I, TextExpected<'src, I>>,
+    {
+        any()
+            .try_map(|c: I::Token, span| {
+                if c.to_ascii()
+                    .map(|i| i.is_ascii_alphabetic() || i == b'_')
+                    .unwrap_or(false)
+                {
+                    Ok(c)
+                } else {
+                    Err(LabelError::expected_found(
+                        [TextExpected::IdentifierPart],
+                        Some(MaybeRef::Val(c)),
+                        span,
+                    ))
+                }
+            })
+            .then(
+                any()
+                    .try_map(|c: I::Token, span| {
+                        if c.to_ascii()
+                            .map_or(false, |i| i.is_ascii_alphanumeric() || i == b'_')
+                        {
+                            Ok(())
+                        } else {
+                            Err(LabelError::expected_found(
+                                [TextExpected::IdentifierPart],
+                                Some(MaybeRef::Val(c)),
+                                span,
+                            ))
+                        }
+                    })
+                    .repeated(),
+            )
+            .to_slice()
+    }
 }
