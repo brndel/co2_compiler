@@ -4,7 +4,7 @@ mod codegen;
 pub use instruction::Register;
 pub use codegen::generate_asm;
 
-use instruction::{Instruction, NumRegister, Value};
+use instruction::Instruction;
 use std::path::Path;
 use std::{fmt::Write, fs, process::Command};
 

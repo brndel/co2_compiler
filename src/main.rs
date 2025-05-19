@@ -7,11 +7,11 @@ mod semantic;
 mod ssa;
 mod compile;
 
-use std::{fs::read_to_string, ops::Range, process::exit, vec};
+use std::{fs::read_to_string, ops::Range, process::exit};
 
 use args::get_args;
-use ariadne::{Cache, Color, Label, Report, ReportKind, sources};
-use chumsky::{Parser, input::Input, prelude::todo, span::SimpleSpan};
+use ariadne::{Color, Label, Report, ReportKind, sources};
+use chumsky::{Parser, input::Input, span::SimpleSpan};
 use compile::{compile_code, generate_asm, Register};
 use ir::{analyze_liveliness, IrGraph};
 use lexer::lexer;

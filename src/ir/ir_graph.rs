@@ -3,8 +3,6 @@ use std::{
     fmt::Display,
 };
 
-use chumsky::container::Seq;
-
 use crate::ssa::{SsaInstruction, VirtualRegister};
 
 use super::LiveSet;
@@ -64,7 +62,7 @@ impl<'a> IrGraph<'a> {
     }
 
     fn pop_highest(registers: &mut BTreeMap<VirtualRegister<'a>, usize>) -> Option<VirtualRegister<'a>> {
-            let (&register, _) = registers.iter().max_by_key(|(k, weight)| *weight)?;
+            let (&register, _) = registers.iter().max_by_key(|(_, weight)| *weight)?;
 
             registers.remove(&register);
 
@@ -97,7 +95,7 @@ impl<'a> IrGraph<'a> {
 
 impl<'a> Display for IrGraph<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (reg, instr) in &self.vertices {
+        for (reg, _) in &self.vertices {
             write!(f, "{} -- [", reg)?;
 
             if let Some(connected) = self.edges.get(&reg) {
