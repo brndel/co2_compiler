@@ -7,7 +7,7 @@ mod semantic;
 mod ssa;
 mod compile;
 
-use std::{fs::read_to_string, ops::Range, process::exit};
+use std::{fs::read_to_string, mem::swap, ops::Range, process::exit};
 
 use args::get_args;
 use ariadne::{Color, Label, Report, ReportKind, sources};
@@ -161,6 +161,11 @@ struct SourceFile<'a> {
 
 impl<'a> SourceFile<'a> {
     pub fn span(&self, span: &SimpleSpan) -> (String, Range<usize>) {
+        let mut span = *span;
+        if span.start > span.end {
+            swap(&mut span.start, &mut span.end);
+        }
+        
         (self.path.to_string(), span.into_range())
     }
 }
