@@ -157,9 +157,6 @@ impl<'a> Analyzed<'a> {
                         None
                     }
                 }
-                // if let Err(err) = Self::check_parse(ident, 10) {
-                //     errors.push(err);
-                // }
             }
             Expression::Binary { a, op, b } => {
                 let a = Self::map_num_expr(errors, *a);
@@ -185,6 +182,7 @@ impl<'a> Analyzed<'a> {
 
     fn parse(num: ParseNum<'a>) -> Result<Spanned<i32>, SemanticError<'a>> {
         match num {
+            ParseNum::Dec(("2147483648", span)) => Ok((-2147483648, span)),
             ParseNum::Dec(ident) => match i32::from_str_radix(ident.0, 10) {
                 Ok(value) => Ok((value, ident.1)),
                 Err(err) => {
