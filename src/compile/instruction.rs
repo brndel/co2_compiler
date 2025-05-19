@@ -17,7 +17,17 @@ pub enum Instruction {
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Instruction::Move { src, dst } => write!(f, "movl {}, {}", src, dst),
+            Instruction::Move { src, dst } => {
+                match (&src, &dst) {
+                    (Value::Register(Register::Stack(_)), Register::Stack(_)) => {
+                        writeln!(f, "movl {}, {}", src, Register::Temp)?;
+                        writeln!(f, "movl {}, {}", Register::Temp, dst)
+                    }
+                    _ => {
+                        write!(f, "movl {}, {}", src, dst)
+                    }
+                }
+            },
             Instruction::Add { reg, value } => write!(f, "add {}, {}", value, reg),
             Instruction::Sub { reg, value } => write!(f, "sub {}, {}", value, reg),
             Instruction::Mul { reg, value } => write!(f, "imul {}, {}", value, reg),
