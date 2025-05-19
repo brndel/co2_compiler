@@ -61,7 +61,7 @@ pub fn lexer<'src>()
         .or(separator.map(Token::Separator))
         .or(operator.map(Token::Operator));
 
-    let word_token = dec_num.or(ident_keyword).or(hex_num);
+    let word_token = hex_num.or(dec_num).or(ident_keyword);
 
     let token = word_token.or(control_token);
 
