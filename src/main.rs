@@ -76,7 +76,7 @@ fn main() {
 
     let assembly = generate_asm(ssa, &colors);
 
-    compile_code(args.output_file, assembly);
+    compile_code(args.output_file, assembly, true);
 
     exit(0);
 }

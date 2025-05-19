@@ -8,17 +8,19 @@ use instruction::{Instruction, NumRegister, Value};
 use std::path::Path;
 use std::{fmt::Write, fs, process::Command};
 
-pub fn compile_code(output: impl AsRef<Path>, instructions: Vec<Instruction>) {
+pub fn compile_code(output: impl AsRef<Path>, instructions: Vec<Instruction>, build_asm: bool) {
     let temp_file_path = output.as_ref().with_extension("s");
     let ouput_file_path = output.as_ref();
 
-    let mut assembly = include_str!("template.s").to_string();
-
-    for instr in instructions {
-        writeln!(&mut assembly, "{}", instr).unwrap();
+    if build_asm {
+        let mut assembly = include_str!("template.s").to_string();
+    
+        for instr in instructions {
+            writeln!(&mut assembly, "{}", instr).unwrap();
+        }
+    
+        fs::write(&temp_file_path, assembly).expect("could not write to temp .s file");
     }
-
-    fs::write(&temp_file_path, assembly).expect("could not write to temp .s file");
 
     #[cfg(target_arch = "x86_64")]
     {
@@ -29,8 +31,11 @@ pub fn compile_code(output: impl AsRef<Path>, instructions: Vec<Instruction>) {
             .spawn()
             .expect("could not start gcc command");
 
-        gcc.wait().expect("gcc wait failed");
+        let gcc_status = gcc.wait().expect("gcc wait failed");
         
+        #[cfg(debug_assertions)]
+        println!("gcc status: {}", gcc_status);
+
         #[cfg(debug_assertions)]
         { // Only execute the program in debug mode
             let status = Command::new(ouput_file_path)

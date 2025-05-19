@@ -2,13 +2,22 @@ use std::collections::BTreeMap;
 
 use crate::{lexer::Operator, ssa::{SsaInstruction, SsaValue, VirtualRegister}};
 
-use super::{instruction::{Instruction, Value}, Register};
+use super::{instruction::{Instruction, StackRegister, Value}, Register};
 
 pub fn generate_asm(
     ssa: Vec<SsaInstruction>,
     registers: &BTreeMap<VirtualRegister, Register>,
 ) -> Vec<Instruction> {
     let mut instructions = Vec::new();
+
+    let highest_stack = registers.values().filter_map(|reg| match reg {
+        Register::Stack(StackRegister(pos)) => Some(*pos),
+        _ => None
+    }).max();
+
+    if let Some(stack) = highest_stack {
+        instructions.push(Instruction::AllocateStack { bytes: stack * 4 });
+    }
 
     for instr in ssa {
         match instr {

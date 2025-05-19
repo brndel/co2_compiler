@@ -3,42 +3,21 @@ use std::fmt::Display;
 use crate::ir::GraphColor;
 
 pub enum Instruction {
-    Move {
-        src: Value,
-        dst: Register,
-    },
-    Add {
-        reg: Register,
-        value: Value,
-    },
-    Sub {
-        reg: Register,
-        value: Value,
-    },
-    Mul {
-        reg: Register,
-        value: Value,
-    },
-    Negate {
-        reg: Register,
-    },
-    Div {
-        reg: Register,
-        value: Value,
-    },
-    Mod {
-        reg: Register,
-        value: Value,
-    },
-    Return {
-        value: Value,
-    },
+    Move { src: Value, dst: Register },
+    Add { reg: Register, value: Value },
+    Sub { reg: Register, value: Value },
+    Mul { reg: Register, value: Value },
+    Negate { reg: Register },
+    Div { reg: Register, value: Value },
+    Mod { reg: Register, value: Value },
+    AllocateStack { bytes: u32 },
+    Return { value: Value },
 }
 
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Instruction::Move { src, dst } => write!(f, "mov {}, {}", src, dst),
+            Instruction::Move { src, dst } => write!(f, "movl {}, {}", src, dst),
             Instruction::Add { reg, value } => write!(f, "add {}, {}", value, reg),
             Instruction::Sub { reg, value } => write!(f, "sub {}, {}", value, reg),
             Instruction::Mul { reg, value } => write!(f, "imul {}, {}", value, reg),
@@ -51,7 +30,7 @@ impl Display for Instruction {
                     value @ Value::Immediate(_) => {
                         writeln!(f, "mov {}, {}", value, reg)?;
                         writeln!(f, "idiv {}", reg)?;
-                    },
+                    }
                 }
                 write!(f, "movl {}, {}", SystemRegister::Eax, reg)
             }
@@ -63,14 +42,20 @@ impl Display for Instruction {
                     value @ Value::Immediate(_) => {
                         writeln!(f, "mov {}, {}", value, reg)?;
                         writeln!(f, "idiv {}", reg)?;
-                    },
+                    }
                 }
                 write!(f, "movl {}, {}", SystemRegister::Edx, reg)
             }
             Instruction::Return { value } => {
                 writeln!(f, "mov {}, {}", value, SystemRegister::Eax)?;
+                writeln!(f, "leave")?;
                 write!(f, "ret")
             }
+            Instruction::AllocateStack { bytes } => {
+                writeln!(f, "push %rbp")?;
+                writeln!(f, "mov %rsp, %rbp")?;
+                write!(f, "sub {}, %rsp", Value::Immediate(*bytes as i32))
+            },
         }
     }
 }
@@ -117,7 +102,7 @@ pub enum NumRegister {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct StackRegister(u32);
+pub struct StackRegister(pub u32);
 
 impl<T: Into<Register>> From<T> for Value {
     fn from(value: T) -> Self {
@@ -175,7 +160,7 @@ impl Display for NumRegister {
 
 impl Display for StackRegister {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "-{}(%ebp)", self.0)
+        write!(f, "-{}(%rbp)", self.0 * 4)
     }
 }
 
@@ -192,6 +177,6 @@ impl GraphColor for Register {
             Register::Num(NumRegister::R15),
         ]
         .into_iter()
-        .chain((0..).map(|i| Register::Stack(StackRegister(i))))
+        .chain((1..).map(|i| Register::Stack(StackRegister(i))))
     }
 }
