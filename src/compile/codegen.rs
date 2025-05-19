@@ -10,14 +10,12 @@ pub fn generate_asm(
 ) -> Vec<Instruction> {
     let mut instructions = Vec::new();
 
-    let highest_stack = registers.values().filter_map(|reg| match reg {
+    let max_stack_register = registers.values().filter_map(|reg| match reg {
         Register::Stack(StackRegister(pos)) => Some(*pos),
         _ => None
-    }).max();
+    }).max().unwrap_or_default();
 
-    if let Some(stack) = highest_stack {
-        instructions.push(Instruction::AllocateStack { bytes: stack * 4 });
-    }
+    instructions.push(Instruction::AllocateStack { bytes: max_stack_register * 4 });
 
     for instr in ssa {
         match instr {
