@@ -12,7 +12,7 @@ use std::{fs::read_to_string, ops::Range, process::exit, vec};
 use args::get_args;
 use ariadne::{Cache, Color, Label, Report, ReportKind, sources};
 use chumsky::{Parser, input::Input, prelude::todo, span::SimpleSpan};
-use compile::{compile_code, Register};
+use compile::{compile_code, generate_asm, Register};
 use ir::{analyze_liveliness, IrGraph};
 use lexer::lexer;
 use parser::{program_parser, ParseNum};
@@ -21,8 +21,6 @@ use semantic::Analyzed;
 
 fn main() {
     let args = get_args();
-
-    eprintln!("args: {:?}", args);
 
     let content = read_to_string(&args.input_file).expect("could not read input file");
 
@@ -48,12 +46,14 @@ fn main() {
         exit(7);
     };
 
+    #[cfg(debug_assertions)]
     println!("Semantic analyzer passed");
 
     let ssa = ssa::to_ssa(analyzed.program.statements);
 
     let liveliness = analyze_liveliness(ssa.clone());
 
+    #[cfg(debug_assertions)]
     for (instr, live_set) in liveliness.iter() {
         let instr = instr.to_string();
         println!("{:<25} {}", instr, live_set);
@@ -61,18 +61,22 @@ fn main() {
 
     let ir_graph = IrGraph::new(liveliness);
 
+    #[cfg(debug_assertions)]
     println!("{}", ir_graph);
 
     let colors = ir_graph.greedy_coloring::<Register>();
 
-    for instr in ssa {
+    #[cfg(debug_assertions)]
+    for instr in &ssa {
         let color = instr.target().and_then(|target| colors.get(target));
         let instr = instr.to_string();
 
         println!("{:<25} {:?}", instr, color);
     }
 
-    // compile_code(args.output_file);
+    let assembly = generate_asm(ssa, &colors);
+
+    compile_code(args.output_file, assembly);
 
     exit(0);
 }

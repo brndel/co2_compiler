@@ -1,34 +1,18 @@
 mod instruction;
+mod codegen;
 
 pub use instruction::Register;
+pub use codegen::generate_asm;
 
 use instruction::{Instruction, NumRegister, Value};
 use std::path::Path;
 use std::{fmt::Write, fs, process::Command};
 
-pub fn compile_code(output: impl AsRef<Path>) {
+pub fn compile_code(output: impl AsRef<Path>, instructions: Vec<Instruction>) {
     let input_file_path = output.as_ref().with_extension("s");
     let ouput_file_path = output.as_ref().with_extension("bin");
 
     let mut assembly = include_str!("template.s").to_string();
-
-    let instructions = vec![
-        Instruction::Move {
-            src: Value::Immediate(77),
-            dst: NumRegister::R8.into(),
-        },
-        Instruction::Move {
-            src: Value::Immediate(10),
-            dst: NumRegister::R9.into(),
-        },
-        Instruction::Mod {
-            register: NumRegister::R8.into(),
-            value: NumRegister::R9.into(),
-        },
-        Instruction::Return {
-            register: NumRegister::R8.into(),
-        },
-    ];
 
     for instr in instructions {
         writeln!(&mut assembly, "{}", instr).unwrap();
@@ -47,11 +31,15 @@ pub fn compile_code(output: impl AsRef<Path>) {
 
         gcc.wait().expect("gcc wait failed");
 
-        let status = Command::new(ouput_file_path)
-            .output()
-            .expect("failed to run binary");
+        #[cfg(debug_assertions)]
+        { // Only execute the program in debug mode
+            let status = Command::new(ouput_file_path)
+                .output()
+                .expect("failed to run binary");
+    
+            println!("binary result: {}", status.status);
+        }
 
-        println!("binary result: {}", status.status);
     }
 
     #[cfg(not(target_arch = "x86_64"))]

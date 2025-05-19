@@ -23,42 +23,52 @@ pub enum Instruction {
         reg: Register,
     },
     Div {
-        register: NumRegister,
-        value: NumRegister,
+        reg: Register,
+        value: Value,
     },
     Mod {
-        register: NumRegister,
-        value: NumRegister,
+        reg: Register,
+        value: Value,
     },
     Return {
-        register: Register,
+        value: Value,
     },
 }
 
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Instruction::Move { src, dst } => write!(f, "movl {}, {}", src, dst),
+            Instruction::Move { src, dst } => write!(f, "mov {}, {}", src, dst),
             Instruction::Add { reg, value } => write!(f, "add {}, {}", value, reg),
             Instruction::Sub { reg, value } => write!(f, "sub {}, {}", value, reg),
             Instruction::Mul { reg, value } => write!(f, "imul {}, {}", value, reg),
             Instruction::Negate { reg } => write!(f, "neg {}", reg),
-            Instruction::Div { register, value } => {
-                writeln!(f, "movl {}, {}", register, Register::Eax)?;
+            Instruction::Div { reg, value } => {
+                writeln!(f, "movl {}, {}", reg, SystemRegister::Eax)?;
                 writeln!(f, "cltd")?;
-                writeln!(f, "idiv {}", value)?;
-                write!(f, "movl {}, {}", Register::Eax, register)
-            }
-            Instruction::Mod { register, value } => {
-                writeln!(f, "movl {}, {}", register, Register::Eax)?;
-                writeln!(f, "cltd")?;
-                writeln!(f, "idiv {}", value)?;
-                write!(f, "movl {}, {}", Register::Edx, register)
-            }
-            Instruction::Return { register } => {
-                if register != &Register::Eax {
-                    writeln!(f, "mov {}, {}", Register::Eax, register)?;
+                match value {
+                    Value::Register(register) => writeln!(f, "idiv {}", register)?,
+                    value @ Value::Immediate(_) => {
+                        writeln!(f, "mov {}, {}", value, reg)?;
+                        writeln!(f, "idiv {}", reg)?;
+                    },
                 }
+                write!(f, "movl {}, {}", SystemRegister::Eax, reg)
+            }
+            Instruction::Mod { reg, value } => {
+                writeln!(f, "movl {}, {}", reg, SystemRegister::Eax)?;
+                writeln!(f, "cltd")?;
+                match value {
+                    Value::Register(register) => writeln!(f, "idiv {}", register)?,
+                    value @ Value::Immediate(_) => {
+                        writeln!(f, "mov {}, {}", value, reg)?;
+                        writeln!(f, "idiv {}", reg)?;
+                    },
+                }
+                write!(f, "movl {}, {}", SystemRegister::Edx, reg)
+            }
+            Instruction::Return { value } => {
+                writeln!(f, "mov {}, {}", value, SystemRegister::Eax)?;
                 write!(f, "ret")
             }
         }
@@ -81,17 +91,22 @@ impl Display for Value {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Register {
-    Eax,
-    Ebx,
-    Ecx,
-    Edx,
+    Temp,
     Num(NumRegister),
     Stack(StackRegister),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SystemRegister {
+    Eax,
+    Ebx,
+    Ecx,
+    Edx,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NumRegister {
-    R8,
+    // R8,
     R9,
     R10,
     R11,
@@ -103,6 +118,12 @@ pub enum NumRegister {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StackRegister(u32);
+
+impl<T: Into<Register>> From<T> for Value {
+    fn from(value: T) -> Self {
+        Value::Register(value.into())
+    }
+}
 
 impl From<NumRegister> for Register {
     fn from(value: NumRegister) -> Self {
@@ -116,13 +137,21 @@ impl From<StackRegister> for Register {
     }
 }
 
+impl Display for SystemRegister {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SystemRegister::Eax => write!(f, "%eax"),
+            SystemRegister::Ebx => write!(f, "%ebx"),
+            SystemRegister::Ecx => write!(f, "%ecx"),
+            SystemRegister::Edx => write!(f, "%edx"),
+        }
+    }
+}
+
 impl Display for Register {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Register::Eax => write!(f, "%eax"),
-            Register::Ebx => write!(f, "%ebx"),
-            Register::Ecx => write!(f, "%ecx"),
-            Register::Edx => write!(f, "%edx"),
+            Register::Temp => write!(f, "%r8d"),
             Register::Num(num_register) => num_register.fmt(f),
             Register::Stack(stack_register) => stack_register.fmt(f),
         }
@@ -132,7 +161,7 @@ impl Display for Register {
 impl Display for NumRegister {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            NumRegister::R8 => write!(f, "%r8d"),
+            // NumRegister::R8 => write!(f, "%r8d"),
             NumRegister::R9 => write!(f, "%r9d"),
             NumRegister::R10 => write!(f, "%r10d"),
             NumRegister::R11 => write!(f, "%r11d"),
@@ -153,7 +182,7 @@ impl Display for StackRegister {
 impl GraphColor for Register {
     fn ascending_iter() -> impl Iterator<Item = Self> {
         [
-            Register::Num(NumRegister::R8),
+            // Register::Num(NumRegister::R8),
             Register::Num(NumRegister::R9),
             Register::Num(NumRegister::R10),
             Register::Num(NumRegister::R11),
@@ -162,6 +191,7 @@ impl GraphColor for Register {
             Register::Num(NumRegister::R14),
             Register::Num(NumRegister::R15),
         ]
-        .into_iter().chain((0..).map(|i| Register::Stack(StackRegister(i))))
+        .into_iter()
+        .chain((0..).map(|i| Register::Stack(StackRegister(i))))
     }
 }
