@@ -8,7 +8,7 @@ use chumsky::{
     prelude::{any, just, one_of, recursive},
     select,
     span::SimpleSpan,
-    text::{ascii::ident, digits, int, newline},
+    text::{digits, ident, int, newline},
 };
 
 type Spanned<T> = (T, SimpleSpan);
@@ -57,30 +57,41 @@ pub fn lexer<'src>()
         .map(Token::Assign)
         .labelled("assign");
 
-    let token = hex_num
-        .or(dec_num)
-        .or(ident_keyword)
+    let control_token = assign
         .or(separator.map(Token::Separator))
-        .or(assign)
         .or(operator.map(Token::Operator));
+
+    let word_token = dec_num.or(ident_keyword).or(hex_num);
+
+    let token = word_token.or(control_token);
 
     let single_comment = just("//").then(any().and_is(newline().not()).repeated());
 
     let multi_comment = recursive(|comment| {
-        let any = any().and_is(just("*/").or(just("/*")).not()).repeated().at_least(1).ignored();
+        let any = any()
+            .and_is(just("*/").or(just("/*")).not())
+            .repeated()
+            .at_least(1)
+            .ignored();
 
-        comment.delimited_by(just("/*"), just("*/")).or(any).repeated()
-    }).delimited_by(just("/*"), just("*/"));
+        comment
+            .delimited_by(just("/*"), just("*/"))
+            .or(any)
+            .repeated()
+    })
+    .delimited_by(just("/*"), just("*/"));
+
+    let whitespace = one_of(" \t\n\r").repeated();
 
     let comment = single_comment
         .ignored()
         .or(multi_comment.ignored())
-        .padded();
+        .padded_by(whitespace);
 
     token
         .map_with(|token, extra| (token, extra.span()))
         .padded_by(comment.repeated())
-        .padded()
+        .padded_by(whitespace)
         .repeated()
         .collect()
 }
