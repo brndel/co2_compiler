@@ -22,9 +22,11 @@ use semantic::Analyzed;
 fn main() {
     let args = get_args();
 
-    println!("args: {:?}", args);
+    eprintln!("args: {:?}", args);
 
-    let content = read_to_string(&args.input_file).unwrap();
+    let content = read_to_string(&args.input_file).expect("could not read input file");
+
+
 
     let source = SourceFile {
         path: &args.input_file,
@@ -62,6 +64,8 @@ fn main() {
     println!("{}", ir_graph);
 
     // compile_code(args.output_file);
+
+    exit(0);
 }
 
 fn parse_file<'a>(source: SourceFile<'a>) -> Option<Program<'a, ParseNum<'a>>> {
