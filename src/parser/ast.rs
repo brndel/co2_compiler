@@ -1,4 +1,4 @@
-use crate::lexer::{Operator, Spanned, UnaryOperator};
+use crate::lexer::{AssignOperator, BinaryOperator, Operator, Spanned, UnaryOperator};
 
 #[derive(Debug, Clone)]
 pub enum Statement<'a, Num = ValueNum> {
@@ -8,7 +8,7 @@ pub enum Statement<'a, Num = ValueNum> {
     },
     Assignment {
         ident: Spanned<&'a str>,
-        op: Option<Operator>,
+        op: Option<AssignOperator>,
         value: Expression<'a, Num>,
     },
     Return {
@@ -24,7 +24,7 @@ pub enum Expression<'a, Num = ValueNum> {
     // HexNum(Spanned<&'a str>),
     Binary {
         a: Box<Self>,
-        op: Operator,
+        op: BinaryOperator,
         b: Box<Self>,
     },
     Unary {

@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::lexer::{Operator, UnaryOperator};
+use crate::lexer::{BinaryOperator, Operator, UnaryOperator};
 
 use super::register::VirtualRegister;
 
@@ -13,7 +13,7 @@ pub enum SsaInstruction<'a> {
     BinaryOp {
         target: VirtualRegister<'a>,
         a: SsaValue<'a>,
-        op: Operator,
+        op: BinaryOperator,
         b: SsaValue<'a>,
     },
     UnaryOp {

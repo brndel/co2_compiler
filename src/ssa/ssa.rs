@@ -36,7 +36,7 @@ pub fn to_ssa<'a>(statements: Vec<Statement<'a>>) -> Vec<SsaInstruction<'a>> {
                         instructions.push(SsaInstruction::BinaryOp {
                             target,
                             a: SsaValue::Register(current_value),
-                            op,
+                            op: op.into(),
                             b: value,
                         });
                     }

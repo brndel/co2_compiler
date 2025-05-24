@@ -9,7 +9,7 @@ use chumsky::{
 };
 
 use crate::{
-    lexer::{Keyword, Operator, Separator, Token, UnaryOperator},
+    lexer::{BinaryOperator, Keyword, Operator, Separator, Token, UnaryOperator},
     program::Program,
 };
 
@@ -73,9 +73,9 @@ where
 
         let mul = {
             let op = select! {
-                Token::Operator(Operator::Mul) => Operator::Mul,
-                Token::Operator(Operator::Div) => Operator::Div,
-                Token::Operator(Operator::Mod) => Operator::Mod,
+                Token::Operator(Operator::Mul) => BinaryOperator::Mul,
+                Token::Operator(Operator::Div) => BinaryOperator::Div,
+                Token::Operator(Operator::Mod) => BinaryOperator::Mod,
             };
 
             unary_op
@@ -91,8 +91,8 @@ where
 
         let sum = {
             let op = select! {
-                Token::Operator(Operator::Plus) => Operator::Plus,
-                Token::Operator(Operator::Minus) => Operator::Minus,
+                Token::Operator(Operator::Plus) => BinaryOperator::Plus,
+                Token::Operator(Operator::Minus) => BinaryOperator::Minus,
             };
 
             mul.clone()

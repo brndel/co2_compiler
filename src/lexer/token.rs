@@ -1,5 +1,7 @@
 use std::{fmt::Display, str::FromStr};
 
+use super::{AssignOperator, Operator};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token<'a> {
     Separator(Separator),
@@ -8,7 +10,7 @@ pub enum Token<'a> {
     HexNum(&'a str),
     Keyword(Keyword),
     Operator(Operator),
-    Assign(Option<Operator>),
+    Assign(Option<AssignOperator>),
 }
 
 impl<'a> Display for Token<'a> {
@@ -24,41 +26,6 @@ pub enum Separator {
     BraceOpen,
     BraceClose,
     Semicolon,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Operator {
-    Plus,
-    Minus,
-    Mul,
-    Div,
-    Mod,
-}
-
-impl Display for Operator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Operator::Plus => write!(f, "+"),
-            Operator::Minus => write!(f, "-"),
-            Operator::Mul => write!(f, "*"),
-            Operator::Div => write!(f, "/"),
-            Operator::Mod => write!(f, "%"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UnaryOperator {
-    Minus,
-}
-
-
-impl Display for UnaryOperator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UnaryOperator::Minus => write!(f, "-"),
-        }
-    }
 }
 
 

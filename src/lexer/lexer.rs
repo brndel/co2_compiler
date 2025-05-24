@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use super::{Keyword, Operator, Separator, Token};
+use super::{AssignOperator, Keyword, Operator, Separator, Token};
 use chumsky::{
     IterParser, Parser,
     error::Rich,
@@ -42,16 +42,11 @@ pub fn lexer<'src>()
     }
     .labelled("separator");
 
-    let operator = select! {
-        '+' => Operator::Plus,
-        '-' => Operator::Minus,
-        '*' => Operator::Mul,
-        '/' => Operator::Div,
-        '%' => Operator::Mod,
-    }
-    .labelled("operator");
+    let operator = Operator::parser().labelled("operator");
 
     let assign = operator
+        .clone()
+        .try_map(|op, span| AssignOperator::try_from(op).map_err(|_| Rich::custom(span, "invalid assign operator")))
         .or_not()
         .then_ignore(just("="))
         .map(Token::Assign)
