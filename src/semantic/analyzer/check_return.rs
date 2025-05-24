@@ -18,7 +18,7 @@ pub fn does_return<'a, Num>(statement: &Statement<'a, Num>) -> bool {
             condition: _,
             then,
             r#else,
-        } => does_return(then) && r#else.as_ref().is_none_or(|r#else| does_return(r#else)),
+        } => does_return(then) && r#else.as_ref().is_some_and(|r#else| does_return(r#else)),
         Statement::While { .. } => false,
         Statement::For { .. } => false,
         Statement::Return { .. } => true,

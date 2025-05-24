@@ -1,19 +1,19 @@
 mod args;
+mod compile;
 mod ir;
 mod lexer;
 mod parser;
 mod program;
 mod semantic;
 mod ssa;
-mod compile;
 
 use std::{fs::read_to_string, mem::swap, ops::Range, process::exit};
 
 use args::get_args;
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::{Parser, input::Input, span::SimpleSpan};
-use compile::{compile_code, generate_asm, Register};
-use ir::{analyze_liveliness, IrGraph};
+use compile::{Register, compile_code, generate_asm};
+use ir::{IrGraph, analyze_liveliness};
 use lexer::lexer;
 use parser::{program_parser, ParseNum};
 use program::Program;
@@ -22,9 +22,10 @@ use semantic::Analyzed;
 fn main() {
     let args = get_args();
 
+    #[cfg(debug_assertions)]
+    dbg!(&args);
+
     let content = read_to_string(&args.input_file).expect("could not read input file");
-
-
 
     let source = SourceFile {
         path: &args.input_file,
@@ -132,7 +133,10 @@ fn parse_file<'a>(source: SourceFile<'a>) -> Option<Program<'a, ParseNum<'a>>> {
     program
 }
 
-fn analyze_program<'a>(program: Program<'a, ParseNum<'a>>, source: SourceFile<'a>) -> Option<Analyzed<'a>> {
+fn analyze_program<'a>(
+    program: Program<'a, ParseNum<'a>>,
+    source: SourceFile<'a>,
+) -> Option<Analyzed<'a>> {
     match Analyzed::new(program) {
         Ok(analyzed) => Some(analyzed),
         Err(errors) => {

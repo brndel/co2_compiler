@@ -2,7 +2,8 @@ use chumsky::{
     IterParser, Parser,
     error::Rich,
     extra,
-    input::ValueInput,
+    input::{MapExtra, ValueInput},
+    pratt::{infix, left, prefix, right},
     prelude::{just, recursive},
     select,
     span::SimpleSpan,
@@ -14,7 +15,8 @@ use crate::{
 };
 
 use super::{
-    ast::{Expression, Statement}, Block, ParseNum, Type
+    Block, ParseNum, Type,
+    ast::{Expression, Statement},
 };
 
 pub fn program_parser<'token, 'src: 'token, I>() -> impl Parser<
@@ -39,18 +41,14 @@ where
         .then(fn_block)
         .map(|(name, block)| Program {
             main_fn_span: name,
-            block
+            block,
         })
         .labelled("main fn")
         .as_context()
 }
 
-pub fn parse_block<'token, 'src: 'token, I>() -> impl Parser<
-    'token,
-    I,
-    Block<'src, ParseNum<'src>>,
-    extra::Err<Rich<'token, Token<'src>, SimpleSpan>>,
->
+pub fn parse_block<'token, 'src: 'token, I>()
+-> impl Parser<'token, I, Block<'src, ParseNum<'src>>, extra::Err<Rich<'token, Token<'src>, SimpleSpan>>>
 where
     I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
 {
@@ -70,110 +68,140 @@ where
             just(Token::Separator(Separator::ParenClose)),
         ));
 
-        let unary_op = {
-            let op = select! {
-                Token::Operator(Operator::Minus) => UnaryOperator::Minus,
-                Token::Operator(Operator::LogicNot) => UnaryOperator::LogicNot,
-                Token::Operator(Operator::BitNot) => UnaryOperator::BitNot,
+        // let binary_expr = |a: Expression<'_, _>, op: BinaryOperator, b: Expression<'_, _>, _| {
+        //     Expression::Binary {
+        //         a: Box::new(a),
+        //         op,
+        //         b: Box::new(b),
+        //     }
+        // };
+        macro_rules! binary_fold {
+            () => {
+                |a, op, b, _| Expression::Binary {
+                    a: Box::new(a),
+                    op,
+                    b: Box::new(b),
+                }
             };
+        }
 
-            op.repeated().foldr(atom, |op, expr| Expression::Unary {
-                op,
-                expr: Box::new(expr),
-            })
-        };
-
-        let mul = binary_op(
-            unary_op,
-            select! {
-                Token::Operator(Operator::Mul) => BinaryOperator::Mul,
-                Token::Operator(Operator::Div) => BinaryOperator::Div,
-                Token::Operator(Operator::Mod) => BinaryOperator::Mod,
-            },
-        );
-
-        let sum = binary_op(
-            mul,
-            select! {
+        let operators = atom.pratt((
+            // logical not, bitwise not, unary minus
+            prefix(
+                10,
+                select! {
+                    Token::Operator(Operator::Minus) => UnaryOperator::Minus,
+                    Token::Operator(Operator::LogicNot) => UnaryOperator::LogicNot,
+                    Token::Operator(Operator::BitNot) => UnaryOperator::BitNot,
+                },
+                |op, expr, _| Expression::Unary {
+                    op,
+                    expr: Box::new(expr),
+                },
+            ),
+            // integer times, divide, modulo
+            infix(
+                left(9),
+                select! {
+                    Token::Operator(Operator::Mul) => BinaryOperator::Mul,
+                    Token::Operator(Operator::Div) => BinaryOperator::Div,
+                    Token::Operator(Operator::Mod) => BinaryOperator::Mod,
+                },
+                binary_fold!(),
+            ),
+            // integer plus, minus
+            infix(
+                left(8),
+                select! {
                 Token::Operator(Operator::Plus) => BinaryOperator::Plus,
                 Token::Operator(Operator::Minus) => BinaryOperator::Minus,
-            },
-        );
-
-        let shift = binary_op(
-            sum,
-            select! {
+                },
+                binary_fold!(),
+            ),
+            // (arithmetic) shift left, right
+            infix(
+                left(7),
+                select! {
                 Token::Operator(Operator::ShiftLeft) => BinaryOperator::ShiftLeft,
                 Token::Operator(Operator::ShiftRight) => BinaryOperator::ShiftRight,
-            },
-        );
-
-        let compare = binary_op(
-            shift,
-            select! {
+                },
+                binary_fold!(),
+            ),
+            // integer comparison
+            infix(
+                left(6),
+                select! {
                 Token::Operator(Operator::Greater) => BinaryOperator::Greater,
                 Token::Operator(Operator::GreaterEq) => BinaryOperator::GreaterEq,
                 Token::Operator(Operator::Less) => BinaryOperator::Less,
                 Token::Operator(Operator::LessEq) => BinaryOperator::LessEq,
-            },
-        );
-
-        let eq = binary_op(
-            compare,
-            select! {
+                },
+                binary_fold!(),
+            ),
+            // overloaded equality, disequality
+            infix(
+                left(5),
+                select! {
                 Token::Operator(Operator::Equals) => BinaryOperator::Equals,
                 Token::Operator(Operator::NotEquals) => BinaryOperator::NotEquals,
-            },
-        );
-
-        let bit_and = binary_op(
-            eq,
-            select! {
+                },
+                binary_fold!(),
+            ),
+            // bitwise and
+            infix(
+                left(4),
+                select! {
                 Token::Operator(Operator::BitAnd) => BinaryOperator::BitAnd
-            },
-        );
-
-        let bit_xor = binary_op(
-            bit_and,
-            select! {
+                },
+                binary_fold!(),
+            ),
+            // bitwise exclusive or
+            infix(
+                left(3),
+                select! {
                 Token::Operator(Operator::BitXor) => BinaryOperator::BitXor
-            },
-        );
-
-        let bit_or = binary_op(
-            bit_xor,
-            select! {
+                },
+                binary_fold!(),
+            ),
+            // bitwise or
+            infix(
+                left(2),
+                select! {
                 Token::Operator(Operator::BitOr) => BinaryOperator::BitOr
-            },
-        );
-
-        let logic_and = binary_op(
-            bit_or,
-            select! {
+                },
+                binary_fold!(),
+            ),
+            // logical and
+            infix(
+                left(1),
+                select! {
                 Token::Operator(Operator::LogicAnd) => BinaryOperator::LogicAnd
-            },
-        );
-
-        let logic_or = binary_op(
-            logic_and,
-            select! {
+                },
+                binary_fold!(),
+            ),
+            // logical or
+            infix(
+                left(1),
+                select! {
                 Token::Operator(Operator::LogicOr) => BinaryOperator::LogicOr
-            },
-        );
+                },
+                binary_fold!(),
+            ),
+        ));
 
-        let ternary = logic_or
+        let ternary = operators
             .clone()
             .then_ignore(just(Token::Operator(Operator::TernaryQuestionMark)))
-            .then(logic_or.clone())
+            .then(operators.clone())
             .then_ignore(just(Token::Operator(Operator::TernaryColon)))
-            .then(logic_or)
+            .then(operators.clone())
             .map(|((condition, a), b)| Expression::Ternary {
                 condition: Box::new(condition),
                 a: Box::new(a),
                 b: Box::new(b),
             });
 
-        ternary
+        ternary.or(operators)
     })
     .labelled("expr")
     .as_context();
@@ -226,12 +254,12 @@ where
         .as_context();
 
     let statements = statement.repeated().collect();
-    
-    let block = just(Token::Separator(Separator::BraceOpen)).ignore_then(statements).then_ignore(just(Token::Separator(Separator::BraceClose)));
-    
-    block.map(|statements| Block {
-        statements,
-    })
+
+    let block = just(Token::Separator(Separator::BraceOpen))
+        .ignore_then(statements)
+        .then_ignore(just(Token::Separator(Separator::BraceClose)));
+
+    block.map(|statements| Block { statements })
 }
 
 pub fn binary_op<'token, 'src: 'token, I, T, P>(
