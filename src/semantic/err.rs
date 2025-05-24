@@ -3,7 +3,11 @@ use std::ops::Range;
 use ariadne::Label;
 use chumsky::span::SimpleSpan;
 
-use crate::{SourceFile, lexer::Spanned};
+use crate::{
+    SourceFile,
+    lexer::{GetSpan, Keyword, Spanned},
+    parser::Type,
+};
 
 #[derive(Debug)]
 #[must_use]
@@ -25,6 +29,17 @@ pub enum SemanticError<'a> {
     IntOverflow {
         ident: Spanned<&'a str>,
     },
+    MissmatchedType {
+        ty: Spanned<Type>,
+        expected_type: Type,
+    },
+    MissmatchedBinaryType {
+        a: Spanned<Type>,
+        b: Spanned<Type>,
+    },
+    LoopControlsOutsideLoop {
+        keyword: Spanned<Keyword>,
+    },
 }
 
 impl<'a> SemanticError<'a> {
@@ -41,6 +56,12 @@ impl<'a> SemanticError<'a> {
             } => &ident.1,
             SemanticError::NoReturnInFunction { ident } => &ident.1,
             SemanticError::IntOverflow { ident } => &ident.1,
+            SemanticError::MissmatchedType {
+                ty,
+                expected_type: _,
+            } => &ty.1,
+            SemanticError::MissmatchedBinaryType { a, b } => &a.1,
+            SemanticError::LoopControlsOutsideLoop { keyword } => &keyword.1,
         }
     }
 
@@ -66,6 +87,17 @@ impl<'a> SemanticError<'a> {
             }
             SemanticError::IntOverflow { ident } => {
                 format!("Int '{}' is too large", ident.0)
+            }
+            SemanticError::MissmatchedType { ty, expected_type } => format!(
+                "Missmatched type. Found type '{}' but expected type '{}'",
+                ty.0, expected_type
+            ),
+            SemanticError::MissmatchedBinaryType { a, b } => format!(
+                "Missmatched types. Type '{}' and '{}' are different but need to be the same",
+                a.0, b.0
+            ),
+            SemanticError::LoopControlsOutsideLoop { keyword } => {
+                format!("'{}' found outside of loop", keyword.0)
             }
         }
     }
@@ -96,6 +128,19 @@ impl<'a> SemanticError<'a> {
             }
             SemanticError::IntOverflow { ident } => {
                 vec![Label::new(source.span(&ident.1)).with_message(self.message())]
+            }
+            SemanticError::MissmatchedType {
+                ty,
+                expected_type: _,
+            } => vec![Label::new(source.span(&ty.1)).with_message(self.message())],
+            SemanticError::MissmatchedBinaryType { a, b } => {
+                vec![
+                    Label::new(source.span(&a.1)).with_message(format!("Has type '{}'", a.1)),
+                    Label::new(source.span(&b.1)).with_message(format!("Has type '{}'", b.1)),
+                ]
+            }
+            SemanticError::LoopControlsOutsideLoop { keyword } => {
+                vec![Label::new(source.span(&keyword.1)).with_message(self.message())]
             }
         }
     }

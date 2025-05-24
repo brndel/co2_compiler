@@ -54,6 +54,40 @@ pub enum Keyword {
     String,
 }
 
+impl AsRef<str> for Keyword {
+    fn as_ref(&self) -> &str {
+        match self {
+            Keyword::Struct => "struct",
+            Keyword::If => "if",
+            Keyword::Else => "else",
+            Keyword::While => "while",
+            Keyword::For => "for",
+            Keyword::Continue => "continue",
+            Keyword::Break => "break",
+            Keyword::Return => "return",
+            Keyword::Assert => "assert",
+            Keyword::True => "true",
+            Keyword::False => "false",
+            Keyword::Null => "NULL",
+            Keyword::Print => "print",
+            Keyword::Read => "read",
+            Keyword::Alloc => "alloc",
+            Keyword::AllocArray => "alloc_array",
+            Keyword::Int => "int",
+            Keyword::Bool => "bool",
+            Keyword::Void => "void",
+            Keyword::Char => "char",
+            Keyword::String => "string",
+        }
+    }
+}
+
+impl Display for Keyword {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
+}
+
 impl FromStr for Keyword {
     type Err = ();
 

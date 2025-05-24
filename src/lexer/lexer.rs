@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use super::{AssignOperator, Keyword, Operator, Separator, Token};
+use super::{AssignOperator, Keyword, Operator, Separator, Spanned, Token};
 use chumsky::{
     IterParser, Parser,
     error::Rich,
@@ -11,7 +11,6 @@ use chumsky::{
     text::{digits, int, newline},
 };
 
-type Spanned<T> = (T, SimpleSpan);
 
 pub fn lexer<'src>()
 -> impl Parser<'src, &'src str, Vec<Spanned<Token<'src>>>, extra::Err<Rich<'src, char, SimpleSpan>>>

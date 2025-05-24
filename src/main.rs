@@ -49,7 +49,9 @@ fn main() {
     #[cfg(debug_assertions)]
     println!("Semantic analyzer passed");
 
-    let ssa = ssa::to_ssa(analyzed.program.statements);
+    return;
+
+    let ssa = ssa::to_ssa(analyzed.program.block.statements);
 
     let ssa = ssa::remove_dead_code(ssa);
 
