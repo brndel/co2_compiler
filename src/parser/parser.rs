@@ -2,8 +2,8 @@ use chumsky::{
     IterParser, Parser,
     error::Rich,
     extra,
-    input::{MapExtra, ValueInput},
-    pratt::{infix, left, prefix, right},
+    input::ValueInput,
+    pratt::{infix, left, prefix},
     prelude::{just, recursive},
     select,
     span::SimpleSpan,
@@ -212,7 +212,7 @@ where
         .labelled("value")
         .as_context();
 
-        let atom = value.or(expr.delimited_by(
+        let atom = value.or(expr.clone().delimited_by(
             just(Token::Separator(Separator::ParenOpen)),
             just(Token::Separator(Separator::ParenClose)),
         ));
@@ -331,19 +331,30 @@ where
             ),
         ));
 
-        let ternary = operators
-            .clone()
-            .then_ignore(just(Token::Operator(Operator::TernaryQuestionMark)))
-            .then(operators.clone())
-            .then_ignore(just(Token::Operator(Operator::TernaryColon)))
-            .repeated()
-            .foldr(operators.clone(),
-                |(condition, a), b| Expression::Ternary {
-                    condition: Box::new(condition),
-                    a: Box::new(a),
-                    b: Box::new(b),
-                },
-            );
+        let ternary_appendix = just(Token::Operator(Operator::TernaryQuestionMark))
+            .ignore_then(expr.clone())
+            .then_ignore(just(Token::Operator(Operator::TernaryColon))).then(expr.clone());
+
+        let ternary = operators.then(ternary_appendix.or_not()).map(|(condition, values)| {
+            match values {
+                Some((a, b)) => Expression::Ternary { condition: Box::new(condition), a: Box::new(a), b: Box::new(b) },
+                None => condition
+            }
+        });
+
+        // let ternary = operators
+        //     .clone()
+        //     .then_ignore(just(Token::Operator(Operator::TernaryQuestionMark)))
+        //     .then(expr.clone())
+        //     .then_ignore(just(Token::Operator(Operator::TernaryColon)))
+        //     .repeated()
+        //     .foldr(expr.clone(),
+        //         |(condition, a), b| Expression::Ternary {
+        //             condition: Box::new(condition),
+        //             a: Box::new(a),
+        //             b: Box::new(b),
+        //         },
+        //     );
 
         ternary
     })
