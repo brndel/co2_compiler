@@ -4,27 +4,30 @@ use crate::{
     lexer::{AssignOperator, BinaryOperator, GetSpan, Spanned, UnaryOperator},
     parser::{Block, Expression, Statement, Type},
     program::Program,
-    semantic::{Namespace, SemanticError},
+    semantic::{Namespace, SemanticError, namespace},
 };
 
 pub fn check_status_and_types<'a, Num>(
     errors: &mut Vec<SemanticError<'a>>,
     program: &Program<'a, Num>,
-) where Num: GetSpan {
-    let namespace = Namespace::new();
-    validate_block(errors, &program.block, namespace);
+) where
+    Num: GetSpan,
+{
+    validate_block(errors, &program.block, None);
 }
 
-fn validate_block<'a, Num>(
+fn validate_block<'a, 'b, Num>(
     errors: &mut Vec<SemanticError<'a>>,
     block: &Block<'a, Num>,
-    mut namespace: Namespace<'a>,
-) -> Namespace<'a>
+    namespace: Option<&'b Namespace<'a, '_>>,
+) -> Namespace<'a, 'b>
 where
     Num: GetSpan,
 {
+    let mut namespace = Namespace::with_parent(namespace);
+
     for statement in &block.statements {
-        namespace = validate_statement(errors, statement, namespace);
+        validate_statement(errors, statement, &mut namespace);
     }
 
     namespace
@@ -33,24 +36,21 @@ where
 fn validate_statement<'a, Num>(
     errors: &mut Vec<SemanticError<'a>>,
     statement: &Statement<'a, Num>,
-    mut namespace: Namespace<'a>,
-) -> Namespace<'a>
-where
+    namespace: &mut Namespace<'a, '_>,
+) where
     Num: GetSpan,
 {
     match statement {
         Statement::Declaration { ty, ident, value } => {
             if let Some(value) = value {
-                let Some(value_ty) = validate_expression(errors, value, &namespace) else {
-                    return namespace;
+                if let Some(value_ty) = validate_expression(errors, value, &namespace) {
+                    if value_ty.0 != ty.0 {
+                        errors.push(SemanticError::MissmatchedType {
+                            ty: value_ty,
+                            expected_type: ty.0,
+                        });
+                    }
                 };
-
-                if value_ty.0 != ty.0 {
-                    errors.push(SemanticError::MissmatchedType {
-                        ty: value_ty,
-                        expected_type: ty.0,
-                    });
-                }
             }
 
             if let Err(err) = namespace.declare(*ident, ty.0, value.is_some()) {
@@ -59,14 +59,14 @@ where
         }
         Statement::Assignment { ident, op, value } => {
             let Some(value_ty) = validate_expression(errors, value, &namespace) else {
-                return namespace;
+                return;
             };
 
             let var_ty = match namespace.get_type(*ident) {
                 Ok(var_ty) => var_ty,
                 Err(err) => {
                     errors.push(err);
-                    return namespace;
+                    return;
                 }
             };
 
@@ -102,83 +102,89 @@ where
             then,
             r#else,
         } => {
-            let Some(condition_ty) = validate_expression(errors, condition, &namespace) else {
-                return namespace;
+            if let Some(condition_ty) = validate_expression(errors, condition, &namespace) {
+                if condition_ty.0 != Type::Bool {
+                    errors.push(SemanticError::MissmatchedType {
+                        ty: condition_ty,
+                        expected_type: Type::Bool,
+                    });
+                }
             };
 
-            if condition_ty.0 != Type::Bool {
-                errors.push(SemanticError::MissmatchedType {
-                    ty: condition_ty,
-                    expected_type: Type::Bool,
-                });
-                return namespace;
-            }
+            let mut then_namespace = Namespace::with_parent(Some(namespace));
+            validate_statement(errors, then, &mut then_namespace);
 
-            namespace = validate_statement(errors, then, namespace);
             if let Some(r#else) = r#else {
-                namespace = validate_statement(errors, r#else, namespace);
+                let mut else_namespace = Namespace::with_parent(Some(namespace));
+                validate_statement(errors, r#else, &mut else_namespace);
+
+                let combined_assignments = then_namespace
+                    .local_assigned_variables()
+                    .intersection(else_namespace.local_assigned_variables());
+
+                let assignments = combined_assignments
+                    .into_iter()
+                    .cloned()
+                    .collect::<Vec<_>>();
+
+                namespace.assign_variable_set(assignments);
             }
         }
-        Statement::While { condition, then } => {
-            let Some(condition_ty) = validate_expression(errors, condition, &namespace) else {
-                return namespace;
+        Statement::While { condition, body: then } => {
+            if let Some(condition_ty) = validate_expression(errors, condition, &namespace) {
+                if condition_ty.0 != Type::Bool {
+                    errors.push(SemanticError::MissmatchedType {
+                        ty: condition_ty,
+                        expected_type: Type::Bool,
+                    });
+                }
             };
 
-            if condition_ty.0 != Type::Bool {
-                errors.push(SemanticError::MissmatchedType {
-                    ty: condition_ty,
-                    expected_type: Type::Bool,
-                });
-                return namespace;
-            }
-
-            namespace = validate_statement(errors, then, namespace);
+            let mut inner = Namespace::with_parent(Some(namespace));
+            validate_statement(errors, then, &mut inner);
         }
         Statement::For {
             init,
             condition,
-            end,
-            then,
+            step,
+            body: then,
         } => {
-            let inner = namespace.new_child();
-
-            let inner = validate_statement(errors, init, inner);
-            validate_expression(errors, condition, &inner);
-
-            let inner = validate_statement(errors, &end, inner);
-            let inner = validate_statement(errors, &then, inner);
-
-            namespace = inner.parent().unwrap();
-        },
-        Statement::Return { expr } => {
-            let Some(expr_ty) = validate_expression(errors, expr, &namespace) else {
-                return namespace;
-            };
-
-            if expr_ty.0 != Type::Int {
-                errors.push(SemanticError::MissmatchedType {
-                    ty: expr_ty,
-                    expected_type: Type::Int,
-                });
+            if let Some(init) = init {
+                validate_statement(errors, init, namespace);
             }
+            if let Some(step) = step {
+                validate_statement(errors, step, namespace);
+            }
+            validate_expression(errors, condition, namespace);
+
+            let mut inner = namespace.new_child();
+            validate_statement(errors, &then, &mut inner);
+        }
+        Statement::Return { expr } => {
+            if let Some(expr_ty) = validate_expression(errors, expr, &namespace) {
+                if expr_ty.0 != Type::Int {
+                    errors.push(SemanticError::MissmatchedType {
+                        ty: expr_ty,
+                        expected_type: Type::Int,
+                    });
+                }
+            };
         }
         Statement::Break(_) | Statement::Continue(_) => (),
         Statement::Block(block) => {
-            let inner = namespace.new_child();
+            let inner = validate_block(errors, block, Some(namespace));
 
-            let inner = validate_block(errors, block, inner);
+            let assigned_vars = inner.local_assigned_variables().clone();
 
-            namespace = inner.parent().unwrap();
+            namespace.assign_variable_set(assigned_vars);
         }
     }
-
-    namespace
 }
 
 fn validate_expression<'a, Num>(
     errors: &mut Vec<SemanticError<'a>>,
     expression: &Expression<'a, Num>,
-    namespace: &Namespace<'a>,
+    namespace: &Namespace<'a, '_>,
 ) -> Option<Spanned<Type>>
 where
     Num: GetSpan,

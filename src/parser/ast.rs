@@ -28,13 +28,13 @@ pub enum Statement<'a, Num = ValueNum> {
     },
     While {
         condition: Expression<'a, Num>,
-        then: Box<Self>,
+        body: Box<Self>,
     },
     For {
-        init: Box<Self>,
+        init: Option<Box<Self>>,
         condition: Expression<'a, Num>,
-        end: Box<Self>,
-        then: Box<Self>,
+        step: Option<Box<Self>>,
+        body: Box<Self>,
     },
     Return {
         expr: Expression<'a, Num>,

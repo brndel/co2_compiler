@@ -74,20 +74,26 @@ fn map_number_statement<'a>(
                 None => None,
             },
         },
-        Statement::While { condition, then } => Statement::While {
+        Statement::While { condition, body } => Statement::While {
             condition: map_num_expr(errors, condition)?,
-            then: Box::new(map_number_statement(errors, *then)?),
+            body: Box::new(map_number_statement(errors, *body)?),
         },
         Statement::For {
             init,
             condition,
-            end,
-            then,
+            step,
+            body,
         } => Statement::For {
-            init: Box::new(map_number_statement(errors, *init)?),
+            init: match init {
+                Some(init) => Some(Box::new(map_number_statement(errors, *init)?)),
+                None => None,
+            },
             condition: map_num_expr(errors, condition)?,
-            end: Box::new(map_number_statement(errors, *end)?),
-            then: Box::new(map_number_statement(errors, *then)?),
+            step: match step {
+                Some(step) => Some(Box::new(map_number_statement(errors, *step)?)),
+                None => None,
+            },
+            body: Box::new(map_number_statement(errors, *body)?),
         },
         Statement::Break(span) => Statement::Break(span),
         Statement::Continue(span) => Statement::Continue(span),

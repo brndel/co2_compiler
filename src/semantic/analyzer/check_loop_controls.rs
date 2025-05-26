@@ -41,17 +41,21 @@ fn validate_statement<'a, Num>(
                 validate_statement(errors, r#else, inside_loop);
             }
         }
-        Statement::While { condition: _, then } => {
+        Statement::While { condition: _, body: then } => {
             validate_statement(errors, then, true);
         }
         Statement::For {
             init,
             condition: _,
-            end,
-            then,
+            step,
+            body: then,
         } => {
-            validate_statement(errors, init, inside_loop);
-            validate_statement(errors, end, inside_loop);
+            if let Some(init) = init {
+                validate_statement(errors, init, inside_loop);
+            }
+            if let Some(step) = step {
+                validate_statement(errors, step, inside_loop);
+            }
             validate_statement(errors, then, true);
         }
         Statement::Break(span) => {

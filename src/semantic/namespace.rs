@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chumsky::span::SimpleSpan;
 
@@ -6,39 +6,46 @@ use crate::{lexer::Spanned, parser::Type};
 
 use super::SemanticError;
 
-pub struct Namespace<'src, T = VariableStatus> {
-    parent: Option<Box<Self>>,
+pub struct Namespace<'src, 'parent, T = VariableStatus> {
+    parent: Option<&'parent Self>,
     variables: BTreeMap<&'src str, T>,
+    local_assigned_variables: BTreeSet<&'src str>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VariableStatus {
     declared_at: SimpleSpan,
     ty: Type,
-    assigned_at: Option<SimpleSpan>,
+    is_assigned: bool,
 }
 
-impl<'src, T> Namespace<'src, T> {
+impl<'src, 'parent, T> Namespace<'src, 'parent, T> {
     pub fn new() -> Self {
         Self {
             parent: None,
             variables: BTreeMap::new(),
+            local_assigned_variables: BTreeSet::new(),
         }
     }
 
-    pub fn new_child(self) -> Self {
+    pub fn new_child<'a: 'parent>(&'a self) -> Namespace<'src, 'a, T> {
         Self {
-            parent: Some(Box::new(self)),
+            parent: Some(&self),
             variables: BTreeMap::new(),
+            local_assigned_variables: BTreeSet::new(),
         }
     }
 
-    pub fn parent(self) -> Option<Self> {
-        self.parent.map(|parent| *parent)
+    pub fn with_parent<'a: 'parent>(parent: Option<&'parent Namespace<'src, 'a, T>>) -> Self {
+        Self {
+            parent,
+            variables: BTreeMap::new(),
+            local_assigned_variables: BTreeSet::new(),
+        }
     }
 }
 
-impl<'src> Namespace<'src, VariableStatus> {
+impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus> {
     fn get_var(&self, ident: &str) -> Option<&VariableStatus> {
         if let Some(parent) = &self.parent {
             if let Some(var) = parent.get_var(ident) {
@@ -49,15 +56,15 @@ impl<'src> Namespace<'src, VariableStatus> {
         self.variables.get(ident)
     }
 
-    fn get_var_mut(&mut self, ident: &str) -> Option<&mut VariableStatus> {
-        if let Some(parent) = &mut self.parent {
-            if let Some(var) = parent.get_var_mut(ident) {
-                return Some(var);
-            }
-        }
+    // fn get_var_mut(&mut self, ident: &str) -> Option<&mut VariableStatus> {
+    //     if let Some(parent) = &mut self.parent {
+    //         if let Some(var) = parent.get_var_mut(ident) {
+    //             return Some(var);
+    //         }
+    //     }
 
-        self.variables.get_mut(ident)
-    }
+    //     self.variables.get_mut(ident)
+    // }
 
     pub fn declare(
         &mut self,
@@ -76,45 +83,76 @@ impl<'src> Namespace<'src, VariableStatus> {
                 VariableStatus {
                     declared_at: ident.1,
                     ty,
-                    assigned_at: assign.then_some(ident.1),
+                    is_assigned: assign,
                 },
             );
             Ok(())
         }
     }
 
-    pub fn assign(&mut self, ident: Spanned<&'src str>, ty: Spanned<Type>) -> Result<(), SemanticError<'src>> {
-        if let Some(status) = self.get_var_mut(ident.0) {
-            if status.assigned_at.is_none() {
-                status.assigned_at = Some(ident.1);
-            }
-            
-            if status.ty == ty.0 {
-                Ok(())
-            } else {
-                Err(SemanticError::MissmatchedType { ty, expected_type: status.ty })
+    pub fn assign(
+        &mut self,
+        ident: Spanned<&'src str>,
+        ty: Spanned<Type>,
+    ) -> Result<(), SemanticError<'src>> {
+        let var_ty;
+
+        if let Some(status) = self.variables.get_mut(ident.0) {
+            status.is_assigned = true;
+            var_ty = status.ty;
+        } else if let Some(status) = self.get_var(ident.0) {
+            var_ty = status.ty;
+
+            if !status.is_assigned {
+                self.local_assigned_variables.insert(ident.0);
             }
         } else {
-            Err(SemanticError::NotDeclared { ident })
+            return Err(SemanticError::NotDeclared { ident });
+        }
+
+        if var_ty == ty.0 {
+            Ok(())
+        } else {
+            Err(SemanticError::MissmatchedType {
+                ty,
+                expected_type: var_ty,
+            })
+        }
+    }
+
+    fn set_assigned_raw(&mut self, ident: &'src str) {
+        if let Some(status) = self.variables.get_mut(ident) {
+            status.is_assigned = true;
+        } else if let Some(status) = self.get_var(ident) {
+            if !status.is_assigned {
+                self.local_assigned_variables.insert(ident);
+            }
         }
     }
 
     pub fn is_assigned(&self, ident: Spanned<&'src str>) -> Result<(), SemanticError<'src>> {
-        match self.get_var(ident.0) {
-            Some(VariableStatus {
-                declared_at,
-                ty: _,
-                assigned_at: None,
-            }) => Err(SemanticError::NotAssigned {
-                ident,
-                declared_at: *declared_at,
-            }),
-            Some(VariableStatus {
-                declared_at: _,
-                ty: _,
-                assigned_at: Some(_),
-            }) => Ok(()),
-            None => Err(SemanticError::NotDeclared { ident }),
+        if let Some(parent) = &self.parent {
+            let result = parent.is_assigned(ident);
+            if result.is_ok() {
+                return result;
+            }
+        }
+
+        if self.local_assigned_variables.contains(ident.0) {
+            return Ok(());
+        }
+
+        if let Some(status) = self.variables.get(ident.0) {
+            if status.is_assigned {
+                Ok(())
+            } else {
+                Err(SemanticError::NotAssigned {
+                    ident,
+                    declared_at: status.declared_at,
+                })
+            }
+        } else {
+            Err(SemanticError::NotDeclared { ident })
         }
     }
 
@@ -123,14 +161,19 @@ impl<'src> Namespace<'src, VariableStatus> {
             Some(VariableStatus {
                 declared_at: _,
                 ty,
-                assigned_at: None,
-            }) => Ok(*ty),
-            Some(VariableStatus {
-                declared_at: _,
-                ty,
-                assigned_at: Some(_),
+                is_assigned: _,
             }) => Ok(*ty),
             None => Err(SemanticError::NotDeclared { ident }),
+        }
+    }
+
+    pub fn local_assigned_variables(&self) -> &BTreeSet<&'src str> {
+        &self.local_assigned_variables
+    }
+
+    pub fn assign_variable_set(&mut self, variables: impl IntoIterator<Item = &'src str>) {
+        for ident in variables {
+            self.set_assigned_raw(ident);
         }
     }
 }
