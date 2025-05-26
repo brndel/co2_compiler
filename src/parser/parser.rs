@@ -131,11 +131,8 @@ where
             Token::Keyword(Keyword::Continue) = e => Statement::Continue(e.span()),
         };
 
-        let simple_statement = assign
-            .clone()
-            .or(decl.clone());
-        let control_statement = ret
-            .or(ctrl);
+        let simple_statement = assign.clone().or(decl.clone());
+        let control_statement = ret.or(ctrl);
 
         let r#if = just(Token::Keyword(Keyword::If))
             .then(just(Token::Separator(Separator::ParenOpen)))
@@ -169,13 +166,19 @@ where
             .then_ignore(just(Token::Separator(Separator::Semicolon)))
             .then(expr.clone())
             .then_ignore(just(Token::Separator(Separator::Semicolon)))
-            .then(assign.clone().or_not()).then_ignore(just(Token::Separator(Separator::ParenClose)))
-            .then(statement.clone()).map(|(((init, condition), step), body)| {
-                Statement::For { init: init.map(Box::new), condition, step: step.map(Box::new), body: Box::new(body) }
+            .then(assign.clone().or_not())
+            .then_ignore(just(Token::Separator(Separator::ParenClose)))
+            .then(statement.clone())
+            .map(|(((init, condition), step), body)| Statement::For {
+                init: init.map(Box::new),
+                condition,
+                step: step.map(Box::new),
+                body: Box::new(body),
             });
 
-
-        let statement_semicolon = simple_statement.or(control_statement).then_ignore(just(Token::Separator(Separator::Semicolon)));
+        let statement_semicolon = simple_statement
+            .or(control_statement)
+            .then_ignore(just(Token::Separator(Separator::Semicolon)));
 
         let statement = statement_semicolon
             .or(block_parser.map(|block| Statement::Block(block)))
@@ -320,7 +323,7 @@ where
             ),
             // logical or
             infix(
-                left(1),
+                left(0),
                 select! {
                 Token::Operator(Operator::LogicOr) => BinaryOperator::LogicOr
                 },
@@ -333,14 +336,16 @@ where
             .then_ignore(just(Token::Operator(Operator::TernaryQuestionMark)))
             .then(operators.clone())
             .then_ignore(just(Token::Operator(Operator::TernaryColon)))
-            .then(operators.clone())
-            .map(|((condition, a), b)| Expression::Ternary {
-                condition: Box::new(condition),
-                a: Box::new(a),
-                b: Box::new(b),
-            });
+            .repeated()
+            .foldr(operators.clone(),
+                |(condition, a), b| Expression::Ternary {
+                    condition: Box::new(condition),
+                    a: Box::new(a),
+                    b: Box::new(b),
+                },
+            );
 
-        ternary.or(operators)
+        ternary
     })
     .labelled("expr")
     .as_context()
