@@ -135,8 +135,8 @@ impl<'a> SemanticError<'a> {
             } => vec![Label::new(source.span(&ty.1)).with_message(self.message())],
             SemanticError::MissmatchedBinaryType { a, b } => {
                 vec![
-                    Label::new(source.span(&a.1)).with_message(format!("Has type '{}'", a.1)),
-                    Label::new(source.span(&b.1)).with_message(format!("Has type '{}'", b.1)),
+                    Label::new(source.span(&a.1)).with_message(format!("Has type '{}'", a.0)),
+                    Label::new(source.span(&b.1)).with_message(format!("Has type '{}'", b.0)),
                 ]
             }
             SemanticError::LoopControlsOutsideLoop { keyword } => {
