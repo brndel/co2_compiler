@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use chumsky::{error::Rich, extra, prelude::just, span::SimpleSpan, Parser};
+use chumsky::{Parser, error::Rich, extra, prelude::just, span::SimpleSpan};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operator {
@@ -35,35 +35,39 @@ pub enum Operator {
 }
 
 impl Operator {
-    pub fn parser<'src>() -> impl Parser<'src, &'src str, Operator, extra::Err<Rich<'src, char, SimpleSpan>>> + Clone {
-            // Int math
-            just("+").to(Operator::Plus).or(
-            just("-").to(Operator::Minus)).or(
-            just("*").to(Operator::Mul)).or(
-            just("/").to(Operator::Div)).or(
-            just("%").to(Operator::Mod)).or(
+    pub fn parser<'src>()
+    -> impl Parser<'src, &'src str, Operator, extra::Err<Rich<'src, char, SimpleSpan>>> + Clone
+    {
+        // Int math
+        just("+")
+            .to(Operator::Plus)
+            .or(just("-").to(Operator::Minus))
+            .or(just("*").to(Operator::Mul))
+            .or(just("/").to(Operator::Div))
+            .or(just("%").to(Operator::Mod))
+            // -insertion- parse != before !
+            .or(just("!=").to(Operator::NotEquals))
             // Bool logic
-            just("!").to(Operator::LogicNot)).or(
-            just("&&").to(Operator::LogicAnd)).or(
-            just("||").to(Operator::LogicOr)).or(
+            .or(just("!").to(Operator::LogicNot))
+            .or(just("&&").to(Operator::LogicAnd))
+            .or(just("||").to(Operator::LogicOr))
             // Bitwise logic
-            just("~").to(Operator::BitNot)).or(
-            just("&").to(Operator::BitAnd)).or(
-            just("|").to(Operator::BitOr)).or(
-            just("^").to(Operator::BitXor)).or(
+            .or(just("~").to(Operator::BitNot))
+            .or(just("&").to(Operator::BitAnd))
+            .or(just("|").to(Operator::BitOr))
+            .or(just("^").to(Operator::BitXor))
             // Bitshift
-            just("<<").to(Operator::ShiftLeft)).or(
-            just(">>").to(Operator::ShiftRight)).or(
+            .or(just("<<").to(Operator::ShiftLeft))
+            .or(just(">>").to(Operator::ShiftRight))
             // Compare
-            just("<").to(Operator::Less)).or(
-            just("<=").to(Operator::LessEq)).or(
-            just(">").to(Operator::Greater)).or(
-            just(">=").to(Operator::GreaterEq)).or(
-            just("==").to(Operator::Equals)).or(
-            just("!=").to(Operator::NotEquals)).or(
+            .or(just("<=").to(Operator::LessEq))
+            .or(just("<").to(Operator::Less))
+            .or(just(">=").to(Operator::GreaterEq))
+            .or(just(">").to(Operator::Greater))
+            .or(just("==").to(Operator::Equals))
             // Ternary
-            just("?").to(Operator::TernaryQuestionMark)).or(
-            just(":").to(Operator::TernaryColon))
+            .or(just("?").to(Operator::TernaryQuestionMark))
+            .or(just(":").to(Operator::TernaryColon))
     }
 }
 
@@ -174,7 +178,7 @@ impl TryFrom<Operator> for UnaryOperator {
             Operator::Minus => Self::Minus,
             Operator::LogicNot => Self::LogicNot,
             Operator::BitNot => Self::BitNot,
-            _ => return Err(())
+            _ => return Err(()),
         })
     }
 }
@@ -204,7 +208,6 @@ impl From<BinaryOperator> for Operator {
     }
 }
 
-
 impl TryFrom<Operator> for BinaryOperator {
     type Error = ();
 
@@ -228,11 +231,10 @@ impl TryFrom<Operator> for BinaryOperator {
             Operator::GreaterEq => Self::GreaterEq,
             Operator::Equals => Self::Equals,
             Operator::NotEquals => Self::NotEquals,
-            _ => return Err(())
+            _ => return Err(()),
         })
     }
 }
-
 
 impl From<AssignOperator> for Operator {
     fn from(value: AssignOperator) -> Self {
@@ -251,7 +253,6 @@ impl From<AssignOperator> for Operator {
     }
 }
 
-
 impl TryFrom<Operator> for AssignOperator {
     type Error = ();
 
@@ -267,7 +268,7 @@ impl TryFrom<Operator> for AssignOperator {
             Operator::BitXor => Self::BitXor,
             Operator::ShiftLeft => Self::ShiftLeft,
             Operator::ShiftRight => Self::ShiftRight,
-            _ => return Err(())
+            _ => return Err(()),
         })
     }
 }

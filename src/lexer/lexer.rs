@@ -51,9 +51,9 @@ pub fn lexer<'src>()
         .map(Token::Assign)
         .labelled("assign");
 
-    let control_token = assign
+    let control_token = operator.map(Token::Operator)
         .or(separator.map(Token::Separator))
-        .or(operator.map(Token::Operator));
+        .or(assign);
 
     let word_token = hex_num.or(dec_num).or(ident_keyword);
 
