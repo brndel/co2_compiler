@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use super::{SsaInstruction, SsaValue, counter::Counter};
+use super::{SsaInstruction, SsaValue, counter::Counter, ir_graph::IrGraphNode};
 
 pub struct BasicBlock<'a> {
     pub label: BlockLabel,
@@ -19,6 +19,18 @@ impl<'a> Display for BasicBlock<'a> {
         writeln!(f, "{}", self.end)?;
 
         Ok(())
+    }
+}
+
+impl<'a> IrGraphNode for BasicBlock<'a> {
+    type Id = BlockLabel;
+
+    fn id(&self) -> Self::Id {
+        self.label
+    }
+
+    fn is_predecessor(&self, id: &Self::Id) -> bool {
+        self.end.goes_to(&id)
     }
 }
 
@@ -85,6 +97,20 @@ pub enum BasicBlockEnd<'a> {
         on_true: BlockLabel,
         on_false: BlockLabel,
     },
+}
+
+impl<'a> BasicBlockEnd<'a> {
+    pub fn goes_to(&self, label: &BlockLabel) -> bool {
+        match self {
+            BasicBlockEnd::Goto { label: to_label } if to_label == label => true,
+            BasicBlockEnd::ConditionalJump {
+                condition: _,
+                on_true,
+                on_false,
+            } if on_true == label || on_false == label => true,
+            _ => false,
+        }
+    }
 }
 
 impl<'a> Display for BasicBlockEnd<'a> {

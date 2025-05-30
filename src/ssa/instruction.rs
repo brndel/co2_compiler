@@ -30,14 +30,16 @@ pub enum SsaInstruction<'a> {
 #[derive(Debug, Clone, Copy)]
 pub enum SsaValue<'a> {
     Register(VirtualRegister<'a>),
-    Immediate(i32),
+    ImmediateNum(i32),
+    ImmediateBool(bool),
 }
 
 impl<'a> Display for SsaValue<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SsaValue::Register(virtual_register) => write!(f, "{}", virtual_register),
-            SsaValue::Immediate(value) => write!(f, "[{}]", value),
+            SsaValue::ImmediateNum(value) => write!(f, "[{}]", value),
+            SsaValue::ImmediateBool(value) => write!(f, "[{}]", value),
         }
     }
 }

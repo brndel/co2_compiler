@@ -19,6 +19,7 @@ use lexer::lexer;
 use parser::{ParseNum, program_parser};
 use program::Program;
 use semantic::Analyzed;
+use ssa::build_ir_graph;
 
 fn main() {
     let args = get_args();
@@ -52,9 +53,9 @@ fn main() {
     println!("Semantic analyzer passed");
 
     
-    let ssa = ssa::to_ssa(analyzed.program);
+    let ir_graph = build_ir_graph(analyzed.program);
     
-    for block in ssa {
+    for block in ir_graph.iter() {
         println!("{}", block);
     }
 

@@ -108,6 +108,7 @@ pub fn generate_asm(
 fn transform_value(value: SsaValue, registers: &BTreeMap<VirtualRegister, Register>) -> Value {
     match value {
         SsaValue::Register(virtual_register) => Value::Register(registers[&virtual_register]),
-        SsaValue::Immediate(value) => Value::Immediate(value),
+        SsaValue::ImmediateNum(value) => Value::Immediate(value),
+        SsaValue::ImmediateBool(value) => Value::Immediate(value.then_some(1).unwrap_or(0)),
     }
 }
