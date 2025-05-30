@@ -1,6 +1,6 @@
-mod ir_graph;
+mod liveliness_graph;
 mod liveliness;
 
-pub use ir_graph::IrGraph;
-pub use ir_graph::GraphColor;
+pub use liveliness_graph::LivelinessGraph;
+pub use liveliness_graph::GraphColor;
 pub use liveliness::*;

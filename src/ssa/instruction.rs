@@ -1,12 +1,16 @@
 use std::fmt::Display;
 
-use crate::lexer::{BinaryOperator, Operator, UnaryOperator};
+use crate::lexer::{BinaryOperator, UnaryOperator};
 
 use super::register::VirtualRegister;
 
 #[derive(Debug, Clone, Copy)]
 pub enum SsaInstruction<'a> {
     Move {
+        target: VirtualRegister<'a>,
+        source: SsaValue<'a>,
+    },
+    PhiMove {
         target: VirtualRegister<'a>,
         source: SsaValue<'a>,
     },
@@ -20,9 +24,6 @@ pub enum SsaInstruction<'a> {
         target: VirtualRegister<'a>,
         op: UnaryOperator,
         value: VirtualRegister<'a>,
-    },
-    Return {
-        value: SsaValue<'a>,
     },
 }
 
@@ -45,24 +46,24 @@ impl<'a> Display for SsaInstruction<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SsaInstruction::Move { target, source } => write!(f, "{} = {}", target, source),
-            SsaInstruction::BinaryOp { target, a, op, b } => write!(f, "{} = {} {} {}", target, a, op, b),
+            SsaInstruction::PhiMove { target, source } => write!(f, "{} '= {}", target, source),
+            SsaInstruction::BinaryOp { target, a, op, b } => {
+                write!(f, "{} = {} {} {}", target, a, op, b)
+            }
             SsaInstruction::UnaryOp { target, op, value } => {
                 write!(f, "{} = {} {}", target, op, value)
             }
-            SsaInstruction::Return { value } => write!(f, "return {}", value),
         }
     }
 }
 
 impl<'a> SsaInstruction<'a> {
-
-    pub fn target(&self) -> Option<&VirtualRegister<'a>> {
+    pub fn target(&self) -> &VirtualRegister<'a> {
         match self {
-            SsaInstruction::Move { target, .. } => Some(target),
-            SsaInstruction::BinaryOp { target, .. } => Some(target),
-            SsaInstruction::UnaryOp { target, .. } => Some(target),
-            SsaInstruction::Return { .. } => None,
+            SsaInstruction::Move { target, .. } => target,
+            SsaInstruction::PhiMove { target, .. } => target,
+            SsaInstruction::BinaryOp { target, .. } => target,
+            SsaInstruction::UnaryOp { target, .. } => target,
         }
     }
-
 }

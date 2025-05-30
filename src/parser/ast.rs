@@ -1,8 +1,9 @@
-use std::fmt::Display;
-
 use chumsky::span::SimpleSpan;
 
-use crate::lexer::{AssignOperator, BinaryOperator, GetSpan, Spanned, UnaryOperator};
+use crate::{
+    core::Type,
+    lexer::{AssignOperator, BinaryOperator, GetSpan, Spanned, UnaryOperator},
+};
 
 #[derive(Debug, Clone)]
 pub struct Block<'a, Num = ValueNum> {
@@ -37,7 +38,7 @@ pub enum Statement<'a, Num = ValueNum> {
         body: Box<Self>,
     },
     Return {
-        expr: Expression<'a, Num>,
+        value: Expression<'a, Num>,
     },
     Break(SimpleSpan),
     Continue(SimpleSpan),
@@ -66,21 +67,6 @@ pub enum Expression<'a, Num = ValueNum> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Type {
-    Int,
-    Bool,
-}
-
-impl Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Type::Int => write!(f, "int"),
-            Type::Bool => write!(f, "bool"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParseNum<'a> {
     Dec(Spanned<&'a str>),
     Hex(Spanned<&'a str>),
@@ -94,7 +80,6 @@ impl ValueNum {
         self.0.0
     }
 }
-
 
 impl<'a> GetSpan for ParseNum<'a> {
     fn span(&self) -> chumsky::prelude::SimpleSpan {

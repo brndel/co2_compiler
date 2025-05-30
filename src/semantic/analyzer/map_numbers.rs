@@ -59,8 +59,8 @@ fn map_number_statement<'a>(
             op,
             value: map_num_expr(errors, value)?,
         },
-        Statement::Return { expr } => Statement::Return {
-            expr: map_num_expr(errors, expr)?,
+        Statement::Return { value: expr } => Statement::Return {
+            value: map_num_expr(errors, expr)?,
         },
         Statement::If {
             condition,

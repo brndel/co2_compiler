@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use chumsky::span::SimpleSpan;
 
-use crate::{lexer::Spanned, parser::Type};
+use crate::{lexer::Spanned, core::Type};
 
 use super::SemanticError;
 

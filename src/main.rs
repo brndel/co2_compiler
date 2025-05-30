@@ -6,6 +6,7 @@ mod parser;
 mod program;
 mod semantic;
 mod ssa;
+mod core;
 
 use std::{fs::read_to_string, mem::swap, ops::Range, process::exit};
 
@@ -13,9 +14,9 @@ use args::get_args;
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::{Parser, input::Input, span::SimpleSpan};
 use compile::{Register, compile_code, generate_asm};
-use ir::{IrGraph, analyze_liveliness};
+use ir::{LivelinessGraph, analyze_liveliness};
 use lexer::lexer;
-use parser::{program_parser, ParseNum};
+use parser::{ParseNum, program_parser};
 use program::Program;
 use semantic::Analyzed;
 
@@ -50,40 +51,44 @@ fn main() {
     #[cfg(debug_assertions)]
     println!("Semantic analyzer passed");
 
+    
+    let ssa = ssa::to_ssa(analyzed.program);
+    
+    for block in ssa {
+        println!("{}", block);
+    }
+
     return;
+    // let ssa = ssa::remove_dead_code(ssa);
 
-    let ssa = ssa::to_ssa(analyzed.program.block.statements);
+    // let liveliness = analyze_liveliness(ssa.clone());
 
-    let ssa = ssa::remove_dead_code(ssa);
+    // #[cfg(debug_assertions)]
+    // for (instr, live_set) in liveliness.iter() {
+    //     let instr = instr.to_string();
+    //     println!("{:<25} {}", instr, live_set);
+    // }
 
-    let liveliness = analyze_liveliness(ssa.clone());
+    // let ir_graph = IrGraph::new(liveliness);
 
-    #[cfg(debug_assertions)]
-    for (instr, live_set) in liveliness.iter() {
-        let instr = instr.to_string();
-        println!("{:<25} {}", instr, live_set);
-    }
+    // #[cfg(debug_assertions)]
+    // println!("{}", ir_graph);
 
-    let ir_graph = IrGraph::new(liveliness);
+    // let colors = ir_graph.greedy_coloring::<Register>();
 
-    #[cfg(debug_assertions)]
-    println!("{}", ir_graph);
+    // #[cfg(debug_assertions)]
+    // for instr in &ssa {
+    //     let color = colors.get(instr.target());
+    //     let instr = instr.to_string();
 
-    let colors = ir_graph.greedy_coloring::<Register>();
+    //     println!("{:<25} {:?}", instr, color);
+    // }
 
-    #[cfg(debug_assertions)]
-    for instr in &ssa {
-        let color = instr.target().and_then(|target| colors.get(target));
-        let instr = instr.to_string();
+    // let assembly = generate_asm(ssa, &colors);
 
-        println!("{:<25} {:?}", instr, color);
-    }
+    // compile_code(args.output_file, assembly, true);
 
-    let assembly = generate_asm(ssa, &colors);
-
-    compile_code(args.output_file, assembly, true);
-
-    exit(0);
+    // exit(0);
 }
 
 fn parse_file<'a>(source: SourceFile<'a>) -> Option<Program<'a, ParseNum<'a>>> {

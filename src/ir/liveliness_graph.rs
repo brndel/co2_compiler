@@ -8,12 +8,12 @@ use crate::ssa::{SsaInstruction, VirtualRegister};
 use super::LiveSet;
 
 #[derive(Debug, Default)]
-pub struct IrGraph<'a> {
+pub struct LivelinessGraph<'a> {
     vertices: BTreeMap<VirtualRegister<'a>, SsaInstruction<'a>>,
     edges: BTreeMap<VirtualRegister<'a>, BTreeSet<VirtualRegister<'a>>>,
 }
 
-impl<'a> IrGraph<'a> {
+impl<'a> LivelinessGraph<'a> {
     pub fn new(instructions: Vec<(SsaInstruction<'a>, LiveSet<'a>)>) -> Self {
         let mut this = Self::default();
 
@@ -21,15 +21,16 @@ impl<'a> IrGraph<'a> {
             let (current_instr, _) = &instrs[0];
             let (_, live_set) = &instrs[1];
 
-            let Some(reg) = current_instr.target() else {
-                continue;
-            };
+            todo!();
+            // let Some(reg) = current_instr.target() else {
+            //     continue;
+            // };
 
-            this.vertices.insert(*reg, *current_instr);
+            // this.vertices.insert(*reg, *current_instr);
 
-            for live_reg in live_set.registers() {
-                this.insert_edge(*reg, *live_reg);
-            }
+            // for live_reg in live_set.registers() {
+            //     this.insert_edge(*reg, *live_reg);
+            // }
         }
 
         this
@@ -93,7 +94,7 @@ impl<'a> IrGraph<'a> {
     }
 }
 
-impl<'a> Display for IrGraph<'a> {
+impl<'a> Display for LivelinessGraph<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (reg, _) in &self.vertices {
             write!(f, "{} -- [", reg)?;

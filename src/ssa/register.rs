@@ -1,11 +1,11 @@
 use std::fmt::Display;
 
-use crate::lexer::Spanned;
+use super::counter::Counter;
 
-#[derive(Debug, Clone, Copy, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct VirtualRegister<'a> {
     pub reg: usize,
-    pub label: Option<Spanned<&'a str>>,
+    pub ident: Option<&'a str>,
 }
 
 impl<'a> PartialEq for VirtualRegister<'a> {
@@ -13,6 +13,8 @@ impl<'a> PartialEq for VirtualRegister<'a> {
         self.reg == other.reg
     }
 }
+
+impl<'a> Eq for VirtualRegister<'a> {}
 
 impl<'a> PartialOrd for VirtualRegister<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -30,7 +32,7 @@ impl<'a> Display for VirtualRegister<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "r{}", self.reg)?;
 
-        if let Some((label, _)) = self.label {
+        if let Some(label) = self.ident {
             write!(f, ":{}", label)?;
         }
 
@@ -38,27 +40,21 @@ impl<'a> Display for VirtualRegister<'a> {
     }
 }
 
-pub struct RegisterCounter {
-    reg: usize,
+impl<'a> From<usize> for VirtualRegister<'a> {
+    fn from(value: usize) -> Self {
+        Self {
+            reg: value,
+            ident: None,
+        }
+    }
 }
 
-impl RegisterCounter {
-    pub fn new() -> Self {
-        Self { reg: 0 }
-    }
+impl Counter {
+    pub fn next_register<'a>(&mut self, ident: &'a str) -> VirtualRegister<'a> {
+        let mut next: VirtualRegister<'a> = self.next();
 
-    pub fn next<'a>(&mut self) -> VirtualRegister<'a> {
-        let reg = self.reg;
-        self.reg += 1;
-        VirtualRegister { reg, label: None }
-    }
+        next.ident = Some(ident);
 
-    pub fn next_label<'a>(&mut self, label: Spanned<&'a str>) -> VirtualRegister<'a> {
-        let reg = self.reg;
-        self.reg += 1;
-        VirtualRegister {
-            reg,
-            label: Some(label),
-        }
+        next
     }
 }

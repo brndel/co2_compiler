@@ -1,8 +1,9 @@
 use chumsky::span::Span;
 
 use crate::{
+    core::Type,
     lexer::{AssignOperator, BinaryOperator, GetSpan, Spanned, UnaryOperator},
-    parser::{Block, Expression, Statement, Type},
+    parser::{Block, Expression, Statement},
     program::Program,
     semantic::{Namespace, SemanticError, namespace},
 };
@@ -130,7 +131,10 @@ fn validate_statement<'a, Num>(
                 namespace.assign_variable_set(assignments);
             }
         }
-        Statement::While { condition, body: then } => {
+        Statement::While {
+            condition,
+            body: then,
+        } => {
             if let Some(condition_ty) = validate_expression(errors, condition, &namespace) {
                 if condition_ty.0 != Type::Bool {
                     errors.push(SemanticError::MissmatchedType {
@@ -160,7 +164,7 @@ fn validate_statement<'a, Num>(
             let mut inner = namespace.new_child();
             validate_statement(errors, &then, &mut inner);
         }
-        Statement::Return { expr } => {
+        Statement::Return { value: expr } => {
             if let Some(expr_ty) = validate_expression(errors, expr, &namespace) {
                 if expr_ty.0 != Type::Int {
                     errors.push(SemanticError::MissmatchedType {

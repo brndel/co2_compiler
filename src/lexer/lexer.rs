@@ -43,17 +43,25 @@ pub fn lexer<'src>()
 
     let operator = Operator::parser().labelled("operator");
 
-    let assign = operator
+    let op_assign  = operator
         .clone()
         .try_map(|op, span| AssignOperator::try_from(op).map_err(|_| Rich::custom(span, "invalid assign operator")))
-        .or_not()
         .then_ignore(just("="))
-        .map(Token::Assign)
-        .labelled("assign");
+        .map(|op|Token::Assign(Some(op))).labelled("op_assign");
 
-    let control_token = operator.map(Token::Operator)
+    let assign = just("=").to(Token::Assign(None)).labelled("assign");
+
+    // let assign = operator
+    //     .clone()
+    //     .try_map(|op, span| AssignOperator::try_from(op).map_err(|_| Rich::custom(span, "invalid assign operator")))
+    //     .or_not()
+    //     .then_ignore(just("="))
+    //     .map(Token::Assign)
+    //     .labelled("assign");
+
+    let control_token = op_assign
         .or(separator.map(Token::Separator))
-        .or(assign);
+        .or(operator.map(Token::Operator)).or(assign);
 
     let word_token = hex_num.or(dec_num).or(ident_keyword);
 

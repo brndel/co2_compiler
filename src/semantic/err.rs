@@ -6,7 +6,7 @@ use chumsky::span::SimpleSpan;
 use crate::{
     SourceFile,
     lexer::{GetSpan, Keyword, Spanned},
-    parser::Type,
+    core::Type,
 };
 
 #[derive(Debug)]

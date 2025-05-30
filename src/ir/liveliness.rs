@@ -2,11 +2,8 @@ use std::{collections::BTreeSet, fmt::Display};
 
 use crate::ssa::{SsaInstruction, SsaValue, VirtualRegister};
 
-pub fn analyze_liveliness(
-    instructions: Vec<SsaInstruction>,
-) -> Vec<(SsaInstruction, LiveSet)> {
+pub fn analyze_liveliness(instructions: Vec<SsaInstruction>) -> Vec<(SsaInstruction, LiveSet)> {
     let mut live_set = LiveSet::new();
-
 
     let instr_with_live = instructions.into_iter().rev().map(|instr| {
         match instr {
@@ -14,19 +11,32 @@ pub fn analyze_liveliness(
                 live_set.remove(target);
                 live_set.insert(source);
             }
-            SsaInstruction::BinaryOp { target, a, op: _, b } => {
+            SsaInstruction::PhiMove { target, source } => {
+                live_set.remove(target);
+                live_set.insert(source);
+            }
+            SsaInstruction::BinaryOp {
+                target,
+                a,
+                op: _,
+                b,
+            } => {
                 live_set.remove(target);
                 live_set.insert(a);
                 live_set.insert(b);
             }
-            SsaInstruction::UnaryOp { target, op: _, value } => {
+            SsaInstruction::UnaryOp {
+                target,
+                op: _,
+                value,
+            } => {
                 live_set.remove(target);
                 live_set.insert(SsaValue::Register(value));
             }
-            SsaInstruction::Return { value } => live_set.insert(value),
         }
 
-        (instr, live_set.clone())
+        todo!()
+        // (instr, live_set.clone())
     });
 
     let mut instructions = instr_with_live.collect::<Vec<_>>();
@@ -49,12 +59,13 @@ impl<'a> LiveSet<'a> {
     }
 
     pub fn insert(&mut self, value: SsaValue<'a>) {
-        match value {
-            SsaValue::Register(virtual_register) => {
-                self.live_registers.insert(virtual_register);
-            }
-            SsaValue::Immediate(_) => (),
-        }
+        todo!()
+        // match value {
+        //     SsaValue::Register(virtual_register) => {
+        //         self.live_registers.insert(virtual_register);
+        //     }
+        //     SsaValue::Immediate(_) => (),
+        // }
     }
 
     pub fn remove(&mut self, register: VirtualRegister<'a>) {

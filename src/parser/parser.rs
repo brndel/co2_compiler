@@ -10,12 +10,11 @@ use chumsky::{
 };
 
 use crate::{
-    lexer::{BinaryOperator, Keyword, Operator, Separator, Token, UnaryOperator},
-    program::Program,
+    core::Type, lexer::{BinaryOperator, Keyword, Operator, Separator, Token, UnaryOperator}, program::Program
 };
 
 use super::{
-    Block, ParseNum, Type,
+    Block, ParseNum,
     ast::{Expression, Statement},
 };
 
@@ -124,7 +123,7 @@ where
 
         let ret = just(Token::Keyword(Keyword::Return))
             .ignore_then(expr.clone())
-            .map(|expr| Statement::Return { expr });
+            .map(|expr| Statement::Return { value: expr });
 
         let ctrl = select! {
             Token::Keyword(Keyword::Break) = e => Statement::Break(e.span()),
@@ -341,20 +340,6 @@ where
                 None => condition
             }
         });
-
-        // let ternary = operators
-        //     .clone()
-        //     .then_ignore(just(Token::Operator(Operator::TernaryQuestionMark)))
-        //     .then(expr.clone())
-        //     .then_ignore(just(Token::Operator(Operator::TernaryColon)))
-        //     .repeated()
-        //     .foldr(expr.clone(),
-        //         |(condition, a), b| Expression::Ternary {
-        //             condition: Box::new(condition),
-        //             a: Box::new(a),
-        //             b: Box::new(b),
-        //         },
-        //     );
 
         ternary
     })

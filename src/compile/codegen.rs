@@ -16,16 +16,28 @@ pub fn generate_asm(
 ) -> Vec<Instruction> {
     let mut instructions = Vec::new();
 
-    let max_stack_register = registers.values().filter_map(|reg| match reg {
-        Register::Stack(StackRegister(pos)) => Some(*pos),
-        _ => None
-    }).max().unwrap_or_default();
+    let max_stack_register = registers
+        .values()
+        .filter_map(|reg| match reg {
+            Register::Stack(StackRegister(pos)) => Some(*pos),
+            _ => None,
+        })
+        .max()
+        .unwrap_or_default();
 
-    instructions.push(Instruction::AllocateStack { bytes: max_stack_register * 4 });
+    instructions.push(Instruction::AllocateStack {
+        bytes: max_stack_register * 4,
+    });
 
     for instr in ssa {
         match instr {
             SsaInstruction::Move { target, source } => {
+                let dst = registers[&target];
+                let src = transform_value(source, registers);
+
+                instructions.push(Instruction::Move { src, dst });
+            }
+            SsaInstruction::PhiMove { target, source } => {
                 let dst = registers[&target];
                 let src = transform_value(source, registers);
 
@@ -83,11 +95,10 @@ pub fn generate_asm(
                     }
                     _ => todo!(),
                 }
-            }
-            SsaInstruction::Return { value } => {
-                let value = transform_value(value, registers);
-                instructions.push(Instruction::Return { value });
-            }
+            } // SsaInstruction::Return { value } => {
+              //     let value = transform_value(value, registers);
+              //     instructions.push(Instruction::Return { value });
+              // }
         }
     }
 

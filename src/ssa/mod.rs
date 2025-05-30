@@ -1,9 +1,11 @@
-mod ssa;
-mod register;
+mod basic_block;
+mod construction;
+mod counter;
 mod instruction;
-mod dead_code;
+mod register;
+mod ssa;
+mod ir_graph;
 
-pub use ssa::to_ssa;
 pub use instruction::*;
 pub use register::*;
-pub use dead_code::remove_dead_code;
+pub use ssa::to_ssa;
