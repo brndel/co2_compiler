@@ -38,13 +38,15 @@ impl<'a> LivelinessGraph<'a> {
         ir_graph: &IrGraph<BasicBlock<'a>>,
         container: &LivelinessContainer<'a>,
     ) {
+        let block = ir_graph.get(&line.block).unwrap();
+
         if self.visited_blocks.contains(&line.block) {
             return;
         }
-        let block = ir_graph.get(&line.block).unwrap();
-
+        
         if line.line == block.instructions.len() {
             self.visited_blocks.insert(block.label);
+
             match &block.end {
                 BasicBlockEnd::Goto { label } => {
                     self.insert_line(
@@ -89,10 +91,6 @@ impl<'a> LivelinessGraph<'a> {
             if let Some(instr) = block.instructions.get(line.line) {
                 let target = instr.target();
                 let live_set = container.get_live_set(&next_line);
-
-                if self.vertices.contains(target) {
-                    return;
-                }
 
                 self.insert_live_set(target, live_set);
             }
