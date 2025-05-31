@@ -14,7 +14,7 @@ impl<'a> Analyzed<'a> {
         let mut errors = Vec::new();
 
         analyzer::check_status_and_types(&mut errors, &program);
-        analyzer::check_return(&mut errors, &program);
+        analyzer::check_loop_controls(&mut errors, &program);
         analyzer::check_return(&mut errors, &program);
         let program = analyzer::map_number(&mut errors, program);
 
