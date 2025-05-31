@@ -131,11 +131,11 @@ impl Display for Instruction {
                 writeln!(f, "movl {}, {}", reg, SystemRegister::Eax)?;
                 writeln!(f, "cltd")?;
                 match value {
-                    Value::Register(register) => writeln!(f, "idiv {}", register)?,
-                    value @ Value::Immediate(_) => {
+                    value @ Value::Immediate(_) | value @ Value::Register(Register::Stack(_)) => {
                         writeln!(f, "mov {}, {}", value, reg)?;
                         writeln!(f, "idiv {}", reg)?;
                     }
+                    Value::Register(register) => writeln!(f, "idiv {}", register)?,
                 }
                 write!(f, "movl {}, {}", SystemRegister::Eax, reg)
             }
@@ -143,11 +143,11 @@ impl Display for Instruction {
                 writeln!(f, "movl {}, {}", reg, SystemRegister::Eax)?;
                 writeln!(f, "cltd")?;
                 match value {
-                    Value::Register(register) => writeln!(f, "idiv {}", register)?,
-                    value @ Value::Immediate(_) => {
+                    value @ Value::Immediate(_) | value @ Value::Register(Register::Stack(_)) => {
                         writeln!(f, "mov {}, {}", value, reg)?;
                         writeln!(f, "idiv {}", reg)?;
                     }
+                    Value::Register(register) => writeln!(f, "idiv {}", register)?,
                 }
                 write!(f, "movl {}, {}", SystemRegister::Edx, reg)
             }
@@ -169,9 +169,19 @@ impl Display for Instruction {
                 write!(f, "sarl %cl, {}", reg)
             }
             Instruction::Compare { op, target, a, b } => {
-                writeln!(f, "cmp {}, {}", b, a)?;
+                if let &Register::Stack(_) = a {
+                    writeln!(f, "mov {}, {}", a, SystemRegister::Eax)?;
+                    writeln!(f, "cmp {}, {}", b, SystemRegister::Eax)?;
+                } else {
+                    writeln!(f, "cmp {}, {}", b, a)?;
+                }
                 writeln!(f, "{} %al", op)?;
-                write!(f, "movzbl %al, {}", target)
+                if let &Register::Stack(_) = target {
+                    writeln!(f, "movzbl %al, {}", SystemRegister::Eax)?;
+                    write!(f, "mov {}, {}", SystemRegister::Eax, target)
+                } else {
+                    write!(f, "movzbl %al, {}", target)
+                }
             }
             Instruction::Negate { reg } => write!(f, "neg {}", reg),
             Instruction::BitNot { reg } => write!(f, "notl {}", reg),
@@ -190,21 +200,26 @@ impl Display for Instruction {
                 if label.id() == 0 {
                     write!(f, "# ")?;
                 }
-                
+
                 write!(f, "{}:", label)
-            },
+            }
             Instruction::Jump { dst } => {
                 write!(f, "jmp {}", dst)
-            },
+            }
             Instruction::JumpConditional {
                 condition,
                 on_true,
                 on_false,
             } => {
-                writeln!(f, "test {}, {}", condition, condition)?;
+                if let &Register::Stack(_) = condition {
+                    writeln!(f, "mov {}, {}", condition, SystemRegister::Eax)?;
+                    writeln!(f, "test {}, {}", SystemRegister::Eax, SystemRegister::Eax)?;
+                } else {
+                    writeln!(f, "test {}, {}", condition, condition)?;
+                }
                 writeln!(f, "jz {}", on_false)?;
                 write!(f, "jmp {}", on_true)
-            },
+            }
         }
     }
 }
