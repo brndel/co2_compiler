@@ -54,6 +54,17 @@ fn validate_statement<'a, Num>(
                 validate_statement(errors, init, inside_loop);
             }
             if let Some(step) = step {
+                match step.as_ref() {
+                    Statement::Assignment { .. } => (),
+                    Statement::Declaration { ident, .. } => {
+                        errors.push(SemanticError::DeclareInForLoopStep {
+                            span: ident.1,
+                        });
+                    }
+                    _ => {
+                        panic!("invalid statement in for loop step")
+                    }
+                }
                 validate_statement(errors, step, inside_loop);
             }
             validate_statement(errors, then, true);

@@ -165,7 +165,7 @@ where
             .then_ignore(just(Token::Separator(Separator::Semicolon)))
             .then(expr.clone())
             .then_ignore(just(Token::Separator(Separator::Semicolon)))
-            .then(assign.clone().or_not())
+            .then(simple_statement.clone().or_not())
             .then_ignore(just(Token::Separator(Separator::ParenClose)))
             .then(statement.clone())
             .map(|(((init, condition), step), body)| Statement::For {

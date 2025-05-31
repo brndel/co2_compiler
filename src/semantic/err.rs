@@ -5,8 +5,8 @@ use chumsky::span::SimpleSpan;
 
 use crate::{
     SourceFile,
-    lexer::{GetSpan, Keyword, Spanned},
     core::Type,
+    lexer::{Keyword, Spanned},
 };
 
 #[derive(Debug)]
@@ -40,6 +40,9 @@ pub enum SemanticError<'a> {
     LoopControlsOutsideLoop {
         keyword: Spanned<Keyword>,
     },
+    DeclareInForLoopStep {
+        span: SimpleSpan,
+    },
 }
 
 impl<'a> SemanticError<'a> {
@@ -60,8 +63,9 @@ impl<'a> SemanticError<'a> {
                 ty,
                 expected_type: _,
             } => &ty.1,
-            SemanticError::MissmatchedBinaryType { a, b } => &a.1,
+            SemanticError::MissmatchedBinaryType { a, b: _ } => &a.1,
             SemanticError::LoopControlsOutsideLoop { keyword } => &keyword.1,
+            SemanticError::DeclareInForLoopStep { span } => &span,
         }
     }
 
@@ -98,6 +102,9 @@ impl<'a> SemanticError<'a> {
             ),
             SemanticError::LoopControlsOutsideLoop { keyword } => {
                 format!("'{}' found outside of loop", keyword.0)
+            }
+            SemanticError::DeclareInForLoopStep { span: _ } => {
+                format!("declare statements are not allowed in for loop step")
             }
         }
     }
@@ -142,6 +149,9 @@ impl<'a> SemanticError<'a> {
             SemanticError::LoopControlsOutsideLoop { keyword } => {
                 vec![Label::new(source.span(&keyword.1)).with_message(self.message())]
             }
+            SemanticError::DeclareInForLoopStep { span } => {
+                vec![Label::new(source.span(span)).with_message(self.message())]
+            },
         }
     }
 }
