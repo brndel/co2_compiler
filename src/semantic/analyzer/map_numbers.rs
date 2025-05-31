@@ -149,6 +149,7 @@ fn map_num_expr<'a>(
 
 fn parse<'a>(num: ParseNum<'a>) -> Result<Spanned<i32>, SemanticError<'a>> {
     match num {
+        ParseNum::Dec(("2147483648", span)) => Ok((-2147483648, span)),
         ParseNum::Dec(ident) => match i32::from_str_radix(ident.0, 10) {
             Ok(value) => Ok((value, ident.1)),
             Err(err) => {
@@ -163,9 +164,7 @@ fn parse<'a>(num: ParseNum<'a>) -> Result<Spanned<i32>, SemanticError<'a>> {
             }
         },
         ParseNum::Hex(ident) => {
-            
-            let value = ident
-                .0;
+            let value = ident.0;
             match u32::from_str_radix(value, 16) {
                 Ok(value) => {
                     let value = i32::from_be_bytes(value.to_be_bytes());

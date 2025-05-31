@@ -22,12 +22,7 @@ pub fn lexer<'src>()
         })
         .labelled("ident/keyword");
 
-    let dec_num = just("-")
-        .or_not()
-        .then(int(10))
-        .to_slice()
-        .map(Token::DecNum)
-        .labelled("dec_num");
+    let dec_num = int(10).to_slice().map(Token::DecNum).labelled("dec_num");
 
     let hex_num = just("0")
         .then(one_of("xX"))
