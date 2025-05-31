@@ -54,16 +54,19 @@ fn main() {
 
     let ir_graph = build_ir_graph(analyzed.program);
 
+    #[cfg(debug_assertions)]
     for block in ir_graph.iter() {
         println!("{}", block);
     }
 
     let live_container = LivelinessContainer::new(&ir_graph);
 
+    #[cfg(debug_assertions)]
     println!("{}", live_container);
 
     let live_graph = LivelinessGraph::new(&ir_graph, &live_container);
 
+    #[cfg(debug_assertions)]
     println!("{}", live_graph);
 
     let registers = live_graph.greedy_coloring::<Register>();
