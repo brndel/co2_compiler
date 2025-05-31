@@ -152,20 +152,20 @@ impl Display for Instruction {
                 write!(f, "movl {}, {}", SystemRegister::Edx, reg)
             }
             Instruction::BitAnd { reg, value } => {
-                write!(f, "andl {}, {}", reg, value)
+                write!(f, "andl {}, {}", value, reg)
             }
             Instruction::BitOr { reg, value } => {
-                write!(f, "orl {}, {}", reg, value)
+                write!(f, "orl {}, {}", value, reg)
             }
             Instruction::BitXor { reg, value } => {
-                write!(f, "xorl {}, {}", reg, value)
+                write!(f, "xorl {}, {}", value, reg)
             }
             Instruction::ShiftLeft { reg, value } => {
-                writeln!(f, "movl {}, {}", SystemRegister::Ecx, value)?;
+                writeln!(f, "movl {}, {}", value, SystemRegister::Ecx)?;
                 write!(f, "sall %cl, {}", reg)
             }
             Instruction::ShiftRight { reg, value } => {
-                writeln!(f, "movl {}, {}", SystemRegister::Ecx, value)?;
+                writeln!(f, "movl {}, {}", value, SystemRegister::Ecx)?;
                 write!(f, "sarl %cl, {}", reg)
             }
             Instruction::Compare { op, target, a, b } => {
