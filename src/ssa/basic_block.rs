@@ -40,6 +40,12 @@ pub struct BlockLabel {
     tag: Option<&'static str>,
 }
 
+impl BlockLabel {
+    pub fn id(&self) -> usize {
+        self.id
+    }
+}
+
 impl From<usize> for BlockLabel {
     fn from(value: usize) -> Self {
         Self {

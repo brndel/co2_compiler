@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     Register,
-    instruction::{Instruction, StackRegister, Value},
+    instruction::{CompareOp, Instruction, StackRegister, Value},
 };
 
 pub fn generate_asm(
@@ -37,6 +37,8 @@ pub fn generate_asm(
             continue;
         }
 
+        instructions.push(Instruction::Label { label: block.label });
+
         for instr in block.instructions {
             match instr {
                 SsaInstruction::Move { target, source } => {
@@ -60,6 +62,7 @@ pub fn generate_asm(
                         src: a,
                         dst: Register::Temp,
                     });
+                    let mut move_dst = true;
                     match op {
                         BinaryOperator::Plus => instructions.push(Instruction::Add {
                             reg: Register::Temp,
@@ -81,24 +84,95 @@ pub fn generate_asm(
                             reg: Register::Temp,
                             value: b,
                         }),
-                        BinaryOperator::LogicAnd => todo!(),
-                        BinaryOperator::LogicOr => todo!(),
-                        BinaryOperator::BitAnd => todo!(),
-                        BinaryOperator::BitOr => todo!(),
-                        BinaryOperator::BitXor => todo!(),
-                        BinaryOperator::ShiftLeft => todo!(),
-                        BinaryOperator::ShiftRight => todo!(),
-                        BinaryOperator::Less => todo!(),
-                        BinaryOperator::LessEq => todo!(),
-                        BinaryOperator::Greater => todo!(),
-                        BinaryOperator::GreaterEq => todo!(),
-                        BinaryOperator::Equals => todo!(),
-                        BinaryOperator::NotEquals => todo!(),
+                        BinaryOperator::LogicAnd => instructions.push(Instruction::BitAnd {
+                            reg: Register::Temp,
+                            value: b,
+                        }),
+                        BinaryOperator::LogicOr => instructions.push(Instruction::BitOr {
+                            reg: Register::Temp,
+                            value: b,
+                        }),
+                        BinaryOperator::BitAnd => instructions.push(Instruction::BitAnd {
+                            reg: Register::Temp,
+                            value: b,
+                        }),
+                        BinaryOperator::BitOr => instructions.push(Instruction::BitOr {
+                            reg: Register::Temp,
+                            value: b,
+                        }),
+                        BinaryOperator::BitXor => instructions.push(Instruction::BitXor {
+                            reg: Register::Temp,
+                            value: b,
+                        }),
+                        BinaryOperator::ShiftLeft => instructions.push(Instruction::ShiftLeft {
+                            reg: Register::Temp,
+                            value: b,
+                        }),
+                        BinaryOperator::ShiftRight => instructions.push(Instruction::ShiftRight {
+                            reg: Register::Temp,
+                            value: b,
+                        }),
+                        BinaryOperator::Less => {
+                            instructions.push(Instruction::Compare {
+                                op: CompareOp::Less,
+                                target: dst,
+                                a: Register::Temp,
+                                b,
+                            });
+                            move_dst = false;
+                        }
+                        BinaryOperator::LessEq => {
+                            instructions.push(Instruction::Compare {
+                                op: CompareOp::LessEq,
+                                target: dst,
+                                a: Register::Temp,
+                                b,
+                            });
+                            move_dst = false;
+                        }
+                        BinaryOperator::Greater => {
+                            instructions.push(Instruction::Compare {
+                                op: CompareOp::Greater,
+                                target: dst,
+                                a: Register::Temp,
+                                b,
+                            });
+                            move_dst = false;
+                        }
+                        BinaryOperator::GreaterEq => {
+                            instructions.push(Instruction::Compare {
+                                op: CompareOp::GreaterEq,
+                                target: dst,
+                                a: Register::Temp,
+                                b,
+                            });
+                            move_dst = false;
+                        }
+                        BinaryOperator::Equals => {
+                            instructions.push(Instruction::Compare {
+                                op: CompareOp::Equals,
+                                target: dst,
+                                a: Register::Temp,
+                                b,
+                            });
+                            move_dst = false;
+                        }
+                        BinaryOperator::NotEquals => {
+                            instructions.push(Instruction::Compare {
+                                op: CompareOp::NotEquals,
+                                target: dst,
+                                a: Register::Temp,
+                                b,
+                            });
+                            move_dst = false;
+                        }
                     }
-                    instructions.push(Instruction::Move {
-                        src: Register::Temp.into(),
-                        dst,
-                    });
+                    if move_dst {
+                        instructions.push(Instruction::Move {
+                            src: Register::Temp.into(),
+                            dst,
+                        });
+                    }
                 }
                 SsaInstruction::UnaryOp { target, op, value } => {
                     let reg = registers[&target];
@@ -112,24 +186,37 @@ pub fn generate_asm(
                         UnaryOperator::Minus => {
                             instructions.push(Instruction::Negate { reg });
                         }
-                        UnaryOperator::LogicNot => todo!(),
-                        UnaryOperator::BitNot => todo!(),
+                        UnaryOperator::LogicNot => instructions.push(Instruction::BitNot { reg }),
+                        UnaryOperator::BitNot => instructions.push(Instruction::BitNot { reg }),
                     }
                 }
             }
         }
 
         match block.end {
-            BasicBlockEnd::Goto { label } => todo!(),
-            BasicBlockEnd::Return { value } => {
-                instructions.push(Instruction::Return { value: transform_value(value, registers) });
+            BasicBlockEnd::Goto { label } => {
+                instructions.push(Instruction::Jump { dst: label });
             },
+            BasicBlockEnd::Return { value } => {
+                instructions.push(Instruction::Return {
+                    value: transform_value(value, registers),
+                });
+            }
             BasicBlockEnd::ConditionalJump {
                 condition,
                 on_true,
                 on_false,
-            } => todo!(),
-        }
+            } => {
+                let condition = match transform_value(condition, registers) {
+                    Value::Register(register) => register,
+                    value @ Value::Immediate(_) => {
+                        instructions.push(Instruction::Move { src: value, dst: Register::Temp });
+                        Register::Temp
+                    },
+                };
+                instructions.push(Instruction::JumpConditional { condition, on_true, on_false });
+            },
+        };
     }
 
     instructions

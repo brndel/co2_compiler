@@ -1,37 +1,132 @@
 use std::fmt::Display;
 
-use crate::register_alloc::GraphColor;
+use crate::{parser::Block, register_alloc::GraphColor, ssa::BlockLabel};
 
 pub enum Instruction {
-    Move { src: Value, dst: Register },
-    Add { reg: Register, value: Value },
-    Sub { reg: Register, value: Value },
-    Mul { reg: Register, value: Value },
-    Negate { reg: Register },
-    Div { reg: Register, value: Value },
-    Mod { reg: Register, value: Value },
-    AllocateStack { bytes: u32 },
-    Return { value: Value },
+    Move {
+        src: Value,
+        dst: Register,
+    },
+    Add {
+        reg: Register,
+        value: Value,
+    },
+    Sub {
+        reg: Register,
+        value: Value,
+    },
+    Mul {
+        reg: Register,
+        value: Value,
+    },
+    Div {
+        reg: Register,
+        value: Value,
+    },
+    Mod {
+        reg: Register,
+        value: Value,
+    },
+
+    BitAnd {
+        reg: Register,
+        value: Value,
+    },
+    BitOr {
+        reg: Register,
+        value: Value,
+    },
+    BitXor {
+        reg: Register,
+        value: Value,
+    },
+
+    ShiftLeft {
+        reg: Register,
+        value: Value,
+    },
+    ShiftRight {
+        reg: Register,
+        value: Value,
+    },
+
+    Negate {
+        reg: Register,
+    },
+    BitNot {
+        reg: Register,
+    },
+
+    Compare {
+        op: CompareOp,
+        target: Register,
+        a: Register,
+        b: Value,
+    },
+
+    // Control
+    AllocateStack {
+        bytes: u32,
+    },
+    Return {
+        value: Value,
+    },
+    Label {
+        label: BlockLabel,
+    },
+    Jump {
+        dst: BlockLabel,
+    },
+    JumpConditional {
+        condition: Register,
+        on_true: BlockLabel,
+        on_false: BlockLabel,
+    },
+}
+
+pub enum CompareOp {
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
+    Equals,
+    NotEquals,
+}
+
+impl AsRef<str> for CompareOp {
+    fn as_ref(&self) -> &str {
+        match self {
+            CompareOp::Less => "setl",
+            CompareOp::LessEq => "setle",
+            CompareOp::Greater => "setg",
+            CompareOp::GreaterEq => "setge",
+            CompareOp::Equals => "sete",
+            CompareOp::NotEquals => "setne",
+        }
+    }
+}
+
+impl Display for CompareOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
 }
 
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Instruction::Move { src, dst } => {
-                match (&src, &dst) {
-                    (Value::Register(Register::Stack(_)), Register::Stack(_)) => {
-                        writeln!(f, "movl {}, {}", src, Register::Temp)?;
-                        writeln!(f, "movl {}, {}", Register::Temp, dst)
-                    }
-                    _ => {
-                        write!(f, "movl {}, {}", src, dst)
-                    }
+            Instruction::Move { src, dst } => match (&src, &dst) {
+                (Value::Register(Register::Stack(_)), Register::Stack(_)) => {
+                    writeln!(f, "movl {}, {}", src, Register::Temp)?;
+                    write!(f, "movl {}, {}", Register::Temp, dst)
+                }
+                _ => {
+                    write!(f, "movl {}, {}", src, dst)
                 }
             },
             Instruction::Add { reg, value } => write!(f, "add {}, {}", value, reg),
             Instruction::Sub { reg, value } => write!(f, "sub {}, {}", value, reg),
             Instruction::Mul { reg, value } => write!(f, "imul {}, {}", value, reg),
-            Instruction::Negate { reg } => write!(f, "neg {}", reg),
             Instruction::Div { reg, value } => {
                 writeln!(f, "movl {}, {}", reg, SystemRegister::Eax)?;
                 writeln!(f, "cltd")?;
@@ -56,6 +151,30 @@ impl Display for Instruction {
                 }
                 write!(f, "movl {}, {}", SystemRegister::Edx, reg)
             }
+            Instruction::BitAnd { reg, value } => {
+                write!(f, "andl {}, {}", reg, value)
+            }
+            Instruction::BitOr { reg, value } => {
+                write!(f, "orl {}, {}", reg, value)
+            }
+            Instruction::BitXor { reg, value } => {
+                write!(f, "xorl {}, {}", reg, value)
+            }
+            Instruction::ShiftLeft { reg, value } => {
+                writeln!(f, "movl {}, {}", SystemRegister::Ecx, value)?;
+                write!(f, "sall %cl, {}", reg)
+            }
+            Instruction::ShiftRight { reg, value } => {
+                writeln!(f, "movl {}, {}", SystemRegister::Ecx, value)?;
+                write!(f, "sarl %cl, {}", reg)
+            }
+            Instruction::Compare { op, target, a, b } => {
+                writeln!(f, "cmp {}, {}", b, a)?;
+                writeln!(f, "{} %al", op)?;
+                write!(f, "movzbl %al, {}", target)
+            }
+            Instruction::Negate { reg } => write!(f, "neg {}", reg),
+            Instruction::BitNot { reg } => write!(f, "notl {}", reg),
             Instruction::Return { value } => {
                 writeln!(f, "mov {}, {}", value, SystemRegister::Eax)?;
                 writeln!(f, "leave")?;
@@ -65,6 +184,26 @@ impl Display for Instruction {
                 writeln!(f, "push %rbp")?;
                 writeln!(f, "mov %rsp, %rbp")?;
                 write!(f, "sub {}, %rsp", Value::Immediate(*bytes as i32))
+            }
+            Instruction::Label { label } => {
+                writeln!(f, "")?;
+                if label.id() == 0 {
+                    write!(f, "# ")?;
+                }
+                
+                write!(f, "{}:", label)
+            },
+            Instruction::Jump { dst } => {
+                write!(f, "jmp {}", dst)
+            },
+            Instruction::JumpConditional {
+                condition,
+                on_true,
+                on_false,
+            } => {
+                writeln!(f, "test {}, {}", condition, condition)?;
+                writeln!(f, "jz {}", on_false)?;
+                write!(f, "jmp {}", on_true)
             },
         }
     }
