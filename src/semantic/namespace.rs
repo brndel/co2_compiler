@@ -167,8 +167,12 @@ impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus> {
         }
     }
 
-    pub fn local_assigned_variables(self) -> BTreeSet<&'src str> {
+    pub fn into_local_assigned_variables(self) -> BTreeSet<&'src str> {
         self.local_assigned_variables
+    }
+
+    pub fn local_assigned_variables(&self) -> &BTreeSet<&'src str> {
+        &self.local_assigned_variables
     }
 
     pub fn assign_variable_set(&mut self, variables: impl IntoIterator<Item = &'src str>) {

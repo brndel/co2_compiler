@@ -119,8 +119,8 @@ fn validate_statement<'a, Num>(
                 let mut else_namespace = Namespace::with_parent(Some(namespace));
                 validate_statement(errors, r#else, &mut else_namespace);
 
-                let then_vars = then_namespace.local_assigned_variables();
-                let else_vars = else_namespace.local_assigned_variables();
+                let then_vars = then_namespace.into_local_assigned_variables();
+                let else_vars = else_namespace.into_local_assigned_variables();
 
                 let combined_assignments = then_vars.intersection(&else_vars);
 
@@ -153,9 +153,9 @@ fn validate_statement<'a, Num>(
             let mut loop_namespace = namespace.new_child();
 
             if let Some(init) = init {
-                let mut init_namespace = loop_namespace.new_child();
-                validate_statement(errors, init, &mut init_namespace);
-                init_vars = Some(init_namespace.local_assigned_variables());
+                validate_statement(errors, init, &mut loop_namespace);
+                let local_vars = loop_namespace.local_assigned_variables().clone();
+                init_vars = Some(local_vars);
             }
             validate_expression(errors, condition, &mut loop_namespace);
 
@@ -184,7 +184,7 @@ fn validate_statement<'a, Num>(
         Statement::Block(block) => {
             let inner = validate_block(errors, block, Some(namespace));
 
-            let assigned_vars = inner.local_assigned_variables();
+            let assigned_vars = inner.into_local_assigned_variables();
 
             namespace.assign_variable_set(assigned_vars);
         }
