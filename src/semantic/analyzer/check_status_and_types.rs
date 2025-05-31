@@ -156,13 +156,14 @@ fn validate_statement<'a, Num>(
             if let Some(init) = init {
                 validate_statement(errors, init, namespace);
             }
-            if let Some(step) = step {
-                validate_statement(errors, step, namespace);
-            }
             validate_expression(errors, condition, namespace);
 
             let mut inner = namespace.new_child();
             validate_statement(errors, &then, &mut inner);
+
+            if let Some(step) = step {
+                validate_statement(errors, step, namespace);
+            }
         }
         Statement::Return { value: expr } => {
             if let Some(expr_ty) = validate_expression(errors, expr, &namespace) {
