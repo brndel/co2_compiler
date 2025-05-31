@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::ir::GraphColor;
+use crate::register_alloc::GraphColor;
 
 pub enum Instruction {
     Move { src: Value, dst: Register },

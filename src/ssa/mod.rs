@@ -7,4 +7,6 @@ mod ir_graph;
 
 pub use instruction::*;
 pub use register::*;
+pub use basic_block::*;
+pub use ir_graph::IrGraph;
 pub use construction::build_ir_graph;

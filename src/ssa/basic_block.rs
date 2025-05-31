@@ -12,8 +12,8 @@ impl<'a> Display for BasicBlock<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{}:", self.label)?;
 
-        for instr in &self.instructions {
-            writeln!(f, "{}", instr)?;
+        for (line, instr) in self.instructions.iter().enumerate() {
+            writeln!(f, "{:2}: {}", line, instr)?;
         }
 
         writeln!(f, "{}", self.end)?;

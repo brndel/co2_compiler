@@ -54,7 +54,7 @@ impl<'a> Context<'a> {
             }
         });
 
-        let predecessors = self.graph.get_predecessors(label).collect::<Vec<_>>();
+        let predecessors = self.graph.get_predecessors(label).map(|block| block.label).collect::<Vec<_>>();
 
         if predecessors.len() == 1 {
             let label = predecessors[0];
@@ -100,7 +100,7 @@ impl<'a> Context<'a> {
         };
 
         for (var, phi_register) in vars {
-            let predecessors = self.graph.get_predecessors(&label).collect::<Vec<_>>();
+            let predecessors = self.graph.get_predecessors(&label).map(|block| block.label).collect::<Vec<_>>();
 
             let mut phi_values = BTreeSet::new();
 

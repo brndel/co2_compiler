@@ -1,4 +1,6 @@
-use std::collections::BTreeMap;
+use std::collections::{btree_map::{IntoKeys, IntoValues, Keys, Values}, BTreeMap};
+
+use super::{BasicBlock, BasicBlockEnd};
 
 pub struct IrGraph<T: IrGraphNode> {
     blocks: BTreeMap<T::Id, T>,
@@ -28,12 +30,12 @@ impl<T: IrGraphNode> IrGraph<T> {
         self.blocks.insert(block.id(), block);
     }
 
-    pub fn get_predecessors(&self, id: &T::Id) -> impl Iterator<Item = T::Id> {
-        self.blocks.iter().filter_map(move |(block_id, block)| {
+    pub fn get_predecessors(&self, id: &T::Id) -> impl Iterator<Item = &T> {
+        self.blocks.values().filter(move |block| {
             if block.is_predecessor(id) {
-                Some(*block_id)
+                true
             } else {
-                None
+                false
             }
         })
     }
@@ -44,6 +46,10 @@ impl<T: IrGraphNode> IrGraph<T> {
 
     pub fn get(&self, id: &T::Id) -> Option<&T> {
         self.blocks.get(id)
+    }
+
+    pub fn get_first(&self) -> Option<&T> {
+        self.blocks.first_key_value().map(|(_, v)| v)
     }
 
     pub fn map<R: IrGraphNode>(self, f: impl Fn(T) -> R) -> IrGraph<R> {
@@ -59,5 +65,35 @@ impl<T: IrGraphNode> IrGraph<T> {
 
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.blocks.values()
+    }
+}
+
+impl<T: IrGraphNode> IntoIterator for IrGraph<T> {
+    type Item = T;
+
+    type IntoIter = IntoValues<T::Id, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.blocks.into_values()
+    }
+}
+
+impl<'a, T: IrGraphNode> IntoIterator for &'a IrGraph<T> {
+    type Item = &'a T;
+
+    type IntoIter = Values<'a, T::Id, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.blocks.values()
+    }
+}
+
+
+impl<'a> IrGraph<BasicBlock<'a>> {
+    pub fn get_return_blocks(&self) -> impl Iterator<Item = &BasicBlock<'a>> {
+        self.blocks.values().filter(|block| match block.end {
+            BasicBlockEnd::Return { .. } => true,
+            _ => false,
+        })
     }
 }

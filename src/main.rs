@@ -1,12 +1,12 @@
 mod args;
 mod compile;
-mod ir;
+mod core;
 mod lexer;
 mod parser;
 mod program;
+mod register_alloc;
 mod semantic;
 mod ssa;
-mod core;
 
 use std::{fs::read_to_string, mem::swap, ops::Range, process::exit};
 
@@ -14,10 +14,10 @@ use args::get_args;
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::{Parser, input::Input, span::SimpleSpan};
 use compile::{Register, compile_code, generate_asm};
-use ir::{LivelinessGraph, analyze_liveliness};
 use lexer::lexer;
 use parser::{ParseNum, program_parser};
 use program::Program;
+use register_alloc::{LivelinessContainer, LivelinessGraph};
 use semantic::Analyzed;
 use ssa::build_ir_graph;
 
@@ -52,14 +52,27 @@ fn main() {
     #[cfg(debug_assertions)]
     println!("Semantic analyzer passed");
 
-    
     let ir_graph = build_ir_graph(analyzed.program);
-    
+
     for block in ir_graph.iter() {
         println!("{}", block);
     }
 
-    return;
+    let live_container = LivelinessContainer::new(&ir_graph);
+
+    println!("{}", live_container);
+
+    let live_graph = LivelinessGraph::new(&ir_graph, &live_container);
+
+    println!("{}", live_graph);
+
+    let registers = live_graph.greedy_coloring::<Register>();
+
+    let assembly = generate_asm(ir_graph, &registers, live_graph.visited_blocks());
+
+    compile_code(args.output_file, assembly, true);
+
+    exit(0);
     // let ssa = ssa::remove_dead_code(ssa);
 
     // let liveliness = analyze_liveliness(ssa.clone());
