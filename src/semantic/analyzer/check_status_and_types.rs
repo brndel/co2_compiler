@@ -119,16 +119,12 @@ fn validate_statement<'a, Num>(
                 let mut else_namespace = Namespace::with_parent(Some(namespace));
                 validate_statement(errors, r#else, &mut else_namespace);
 
-                let combined_assignments = then_namespace
-                    .local_assigned_variables()
-                    .intersection(else_namespace.local_assigned_variables());
+                let then_vars = then_namespace.local_assigned_variables();
+                let else_vars = else_namespace.local_assigned_variables();
 
-                let assignments = combined_assignments
-                    .into_iter()
-                    .cloned()
-                    .collect::<Vec<_>>();
+                let combined_assignments = then_vars.intersection(&else_vars);
 
-                namespace.assign_variable_set(assignments);
+                namespace.assign_variable_set(combined_assignments.into_iter().map(|var| *var));
             }
         }
         Statement::While {
@@ -153,16 +149,25 @@ fn validate_statement<'a, Num>(
             step,
             body: then,
         } => {
-            if let Some(init) = init {
-                validate_statement(errors, init, namespace);
-            }
-            validate_expression(errors, condition, namespace);
+            let mut init_vars = None;
+            let mut loop_namespace = namespace.new_child();
 
-            let mut inner = namespace.new_child();
+            if let Some(init) = init {
+                let mut init_namespace = loop_namespace.new_child();
+                validate_statement(errors, init, &mut init_namespace);
+                init_vars = Some(init_namespace.local_assigned_variables());
+            }
+            validate_expression(errors, condition, &mut loop_namespace);
+
+            let mut inner = loop_namespace.new_child();
             validate_statement(errors, &then, &mut inner);
 
             if let Some(step) = step {
-                validate_statement(errors, step, namespace);
+                validate_statement(errors, step, &mut loop_namespace);
+            }
+
+            if let Some(init_vars) = init_vars {
+                namespace.assign_variable_set(init_vars);
             }
         }
         Statement::Return { value: expr } => {
@@ -179,7 +184,7 @@ fn validate_statement<'a, Num>(
         Statement::Block(block) => {
             let inner = validate_block(errors, block, Some(namespace));
 
-            let assigned_vars = inner.local_assigned_variables().clone();
+            let assigned_vars = inner.local_assigned_variables();
 
             namespace.assign_variable_set(assigned_vars);
         }
