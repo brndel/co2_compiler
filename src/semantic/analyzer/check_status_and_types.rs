@@ -28,7 +28,9 @@ where
     let mut namespace = Namespace::with_parent(namespace);
 
     for statement in &block.statements {
-        validate_statement(errors, statement, &mut namespace);
+        if !validate_statement(errors, statement, &mut namespace) {
+            break;
+        }
     }
 
     namespace
@@ -38,7 +40,8 @@ fn validate_statement<'a, Num>(
     errors: &mut Vec<SemanticError<'a>>,
     statement: &Statement<'a, Num>,
     namespace: &mut Namespace<'a, '_>,
-) where
+) -> bool
+where
     Num: GetSpan,
 {
     match statement {
@@ -60,14 +63,14 @@ fn validate_statement<'a, Num>(
         }
         Statement::Assignment { ident, op, value } => {
             let Some(value_ty) = validate_expression(errors, value, &namespace) else {
-                return;
+                return true;
             };
 
             let var_ty = match namespace.get_type(*ident) {
                 Ok(var_ty) => var_ty,
                 Err(err) => {
                     errors.push(err);
-                    return;
+                    return true;
                 }
             };
 
@@ -179,8 +182,9 @@ fn validate_statement<'a, Num>(
                     });
                 }
             };
+            return false;
         }
-        Statement::Break(_) | Statement::Continue(_) => (),
+        Statement::Break(_) | Statement::Continue(_) => return false,
         Statement::Block(block) => {
             let inner = validate_block(errors, block, Some(namespace));
 
@@ -189,6 +193,7 @@ fn validate_statement<'a, Num>(
             namespace.assign_variable_set(assigned_vars);
         }
     }
+    return true;
 }
 
 fn validate_expression<'a, Num>(
