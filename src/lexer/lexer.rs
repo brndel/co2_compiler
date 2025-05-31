@@ -11,7 +11,6 @@ use chumsky::{
     text::{digits, int, newline},
 };
 
-
 pub fn lexer<'src>()
 -> impl Parser<'src, &'src str, Vec<Spanned<Token<'src>>>, extra::Err<Rich<'src, char, SimpleSpan>>>
 {
@@ -23,12 +22,16 @@ pub fn lexer<'src>()
         })
         .labelled("ident/keyword");
 
-    let dec_num = just("-").or_not().then(int(10)).to_slice().map(Token::DecNum).labelled("dec_num");
+    let dec_num = just("-")
+        .or_not()
+        .then(int(10))
+        .to_slice()
+        .map(Token::DecNum)
+        .labelled("dec_num");
 
     let hex_num = just("0")
         .then(one_of("xX"))
-        .then(digits(16))
-        .to_slice()
+        .ignore_then(digits(16).to_slice())
         .map(Token::HexNum)
         .labelled("hex_num");
 
@@ -43,11 +46,14 @@ pub fn lexer<'src>()
 
     let operator = Operator::parser().labelled("operator");
 
-    let op_assign  = operator
+    let op_assign = operator
         .clone()
-        .try_map(|op, span| AssignOperator::try_from(op).map_err(|_| Rich::custom(span, "invalid assign operator")))
+        .try_map(|op, span| {
+            AssignOperator::try_from(op).map_err(|_| Rich::custom(span, "invalid assign operator"))
+        })
         .then_ignore(just("="))
-        .map(|op|Token::Assign(Some(op))).labelled("op_assign");
+        .map(|op| Token::Assign(Some(op)))
+        .labelled("op_assign");
 
     let assign = just("=").to(Token::Assign(None)).labelled("assign");
 
@@ -61,7 +67,8 @@ pub fn lexer<'src>()
 
     let control_token = op_assign
         .or(separator.map(Token::Separator))
-        .or(operator.map(Token::Operator)).or(assign);
+        .or(operator.map(Token::Operator))
+        .or(assign);
 
     let word_token = hex_num.or(dec_num).or(ident_keyword);
 
@@ -101,7 +108,13 @@ pub fn lexer<'src>()
 mod chumsky_fix {
 
     use chumsky::{
-        extra::ParserExtra, input::{SliceInput, StrInput}, label::LabelError, prelude::any, text::{Char, TextExpected}, util::MaybeRef, Parser
+        Parser,
+        extra::ParserExtra,
+        input::{SliceInput, StrInput},
+        label::LabelError,
+        prelude::any,
+        text::{Char, TextExpected},
+        util::MaybeRef,
     };
 
     /// A parser that accepts a C-style identifier.
@@ -112,8 +125,7 @@ mod chumsky_fix {
     /// An identifier is defined as an ASCII alphabetic character or an underscore followed by any number of alphanumeric
     /// characters or underscores. The regex pattern for it is `[a-zA-Z_][a-zA-Z0-9_]*`.
     #[must_use]
-    pub fn ident<'src, I, E>()
-    -> impl Parser<'src, I, <I as SliceInput<'src>>::Slice, E> + Copy
+    pub fn ident<'src, I, E>() -> impl Parser<'src, I, <I as SliceInput<'src>>::Slice, E> + Copy
     where
         I: StrInput<'src>,
         I::Token: Char + 'src,

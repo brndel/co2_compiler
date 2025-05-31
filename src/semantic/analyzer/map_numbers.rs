@@ -163,10 +163,9 @@ fn parse<'a>(num: ParseNum<'a>) -> Result<Spanned<i32>, SemanticError<'a>> {
             }
         },
         ParseNum::Hex(ident) => {
+            
             let value = ident
-                .0
-                .strip_prefix("0x")
-                .expect("Hex num missing 0x prefix");
+                .0;
             match u32::from_str_radix(value, 16) {
                 Ok(value) => {
                     let value = i32::from_be_bytes(value.to_be_bytes());
