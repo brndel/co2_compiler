@@ -149,7 +149,7 @@ pub fn build_ir_statement<'a>(
             let step_label = if step.is_some() {
                 ctx.counter.next_block_label("for_step")
             } else {
-                body_label
+                condition_label
             };
 
             builder.end(BasicBlockEnd::Goto { label: init_label }, ctx);
