@@ -1,4 +1,4 @@
-use chumsky::span::Span;
+use chumsky::{error, span::Span};
 
 use crate::{
     core::Type,
@@ -29,7 +29,7 @@ where
 
     for statement in &block.statements {
         if !validate_statement(errors, statement, &mut namespace) {
-            break;
+            // break;
         }
     }
 
@@ -74,29 +74,21 @@ where
                 }
             };
 
-            if let Some(op) = op {
-                match op {
-                    AssignOperator::Plus
-                    | AssignOperator::Minus
-                    | AssignOperator::Mul
-                    | AssignOperator::Div
-                    | AssignOperator::Mod
-                    | AssignOperator::ShiftLeft
-                    | AssignOperator::ShiftRight
-                    | AssignOperator::BitAnd
-                    | AssignOperator::BitOr
-                    | AssignOperator::BitXor => {
-                        check_binary_type(
-                            errors,
-                            (var_ty, ident.1),
-                            value_ty,
-                            Some(Type::Int),
-                            Type::Int,
-                        );
-                    }
-                }
-            }
+            if op.is_some() {
 
+                if let Err(err) = namespace.is_assigned(*ident) {
+                    errors.push(err);
+                }
+
+                check_binary_type(
+                    errors,
+                    (var_ty, ident.1),
+                    value_ty,
+                    Some(Type::Int),
+                    Type::Int,
+                );
+            }
+            
             if let Err(err) = namespace.assign(*ident, value_ty) {
                 errors.push(err);
             }
