@@ -28,9 +28,7 @@ where
     let mut namespace = Namespace::with_parent(namespace);
 
     for statement in &block.statements {
-        if !validate_statement(errors, statement, &mut namespace) {
-            // break;
-        }
+        validate_statement(errors, statement, &mut namespace)
     }
 
     namespace
@@ -40,8 +38,7 @@ fn validate_statement<'a, Num>(
     errors: &mut Vec<SemanticError<'a>>,
     statement: &Statement<'a, Num>,
     namespace: &mut Namespace<'a, '_>,
-) -> bool
-where
+) where
     Num: GetSpan,
 {
     match statement {
@@ -63,19 +60,18 @@ where
         }
         Statement::Assignment { ident, op, value } => {
             let Some(value_ty) = validate_expression(errors, value, &namespace) else {
-                return true;
+                return;
             };
 
             let var_ty = match namespace.get_type(*ident) {
                 Ok(var_ty) => var_ty,
                 Err(err) => {
                     errors.push(err);
-                    return true;
+                    return;
                 }
             };
 
             if op.is_some() {
-
                 if let Err(err) = namespace.is_assigned(*ident) {
                     errors.push(err);
                 }
@@ -88,7 +84,7 @@ where
                     Type::Int,
                 );
             }
-            
+
             if let Err(err) = namespace.assign(*ident, value_ty) {
                 errors.push(err);
             }
@@ -117,9 +113,9 @@ where
                 let then_vars = then_namespace.into_local_assigned_variables();
                 let else_vars = else_namespace.into_local_assigned_variables();
 
-                let combined_assignments = then_vars.intersection(&else_vars);
+                let combined_assignments = then_vars.intersection(else_vars);
 
-                namespace.assign_variable_set(combined_assignments.into_iter().map(|var| *var));
+                namespace.assign_variable_set(&combined_assignments);
             }
         }
         Statement::While {
@@ -162,7 +158,7 @@ where
             }
 
             if let Some(init_vars) = init_vars {
-                namespace.assign_variable_set(init_vars);
+                namespace.assign_variable_set(&init_vars);
             }
         }
         Statement::Return { value: expr } => {
@@ -174,18 +170,17 @@ where
                     });
                 }
             };
-            return false;
+            namespace.assign_everything();
         }
-        Statement::Break(_) | Statement::Continue(_) => return false,
+        Statement::Break(_) | Statement::Continue(_) => namespace.assign_everything(),
         Statement::Block(block) => {
             let inner = validate_block(errors, block, Some(namespace));
 
             let assigned_vars = inner.into_local_assigned_variables();
 
-            namespace.assign_variable_set(assigned_vars);
+            namespace.assign_variable_set(&assigned_vars);
         }
     }
-    return true;
 }
 
 fn validate_expression<'a, Num>(

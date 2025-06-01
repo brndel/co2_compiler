@@ -2,14 +2,14 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use chumsky::span::SimpleSpan;
 
-use crate::{lexer::Spanned, core::Type};
+use crate::{core::Type, lexer::Spanned};
 
 use super::SemanticError;
 
 pub struct Namespace<'src, 'parent, T = VariableStatus> {
     parent: Option<&'parent Self>,
     variables: BTreeMap<&'src str, T>,
-    local_assigned_variables: BTreeSet<&'src str>,
+    local_assigned_variables: LocalAssignedVariables<'src>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,12 +19,57 @@ pub struct VariableStatus {
     is_assigned: bool,
 }
 
+#[derive(Debug, Clone)]
+pub enum LocalAssignedVariables<'a> {
+    Everything,
+    Vars(BTreeSet<&'a str>),
+}
+
+impl<'a> LocalAssignedVariables<'a> {
+    pub fn new() -> Self {
+        Self::Vars(BTreeSet::new())
+    }
+
+    pub fn assign(&mut self, var: &'a str) {
+        match self {
+            LocalAssignedVariables::Everything => (),
+            LocalAssignedVariables::Vars(btree_set) => {
+                btree_set.insert(var);
+            }
+        }
+    }
+
+    pub fn is_assigned(&self, var: &'a str) -> bool {
+        match self {
+            LocalAssignedVariables::Everything => true,
+            LocalAssignedVariables::Vars(btree_set) => btree_set.contains(var),
+        }
+    }
+
+    pub fn assign_everything(&mut self) {
+        *self = Self::Everything
+    }
+
+    pub fn intersection(self, other: Self) -> Self {
+        match (self, other) {
+            (LocalAssignedVariables::Everything, LocalAssignedVariables::Everything) => {
+                LocalAssignedVariables::Everything
+            }
+            (LocalAssignedVariables::Everything, vars)
+            | (vars, LocalAssignedVariables::Everything) => vars,
+            (LocalAssignedVariables::Vars(a), LocalAssignedVariables::Vars(b)) => {
+                Self::Vars(a.intersection(&b).cloned().collect())
+            }
+        }
+    }
+}
+
 impl<'src, 'parent, T> Namespace<'src, 'parent, T> {
     pub fn new() -> Self {
         Self {
             parent: None,
             variables: BTreeMap::new(),
-            local_assigned_variables: BTreeSet::new(),
+            local_assigned_variables: LocalAssignedVariables::new(),
         }
     }
 
@@ -32,7 +77,7 @@ impl<'src, 'parent, T> Namespace<'src, 'parent, T> {
         Self {
             parent: Some(&self),
             variables: BTreeMap::new(),
-            local_assigned_variables: BTreeSet::new(),
+            local_assigned_variables: LocalAssignedVariables::new(),
         }
     }
 
@@ -40,7 +85,7 @@ impl<'src, 'parent, T> Namespace<'src, 'parent, T> {
         Self {
             parent,
             variables: BTreeMap::new(),
-            local_assigned_variables: BTreeSet::new(),
+            local_assigned_variables: LocalAssignedVariables::new(),
         }
     }
 }
@@ -55,16 +100,6 @@ impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus> {
 
         self.variables.get(ident)
     }
-
-    // fn get_var_mut(&mut self, ident: &str) -> Option<&mut VariableStatus> {
-    //     if let Some(parent) = &mut self.parent {
-    //         if let Some(var) = parent.get_var_mut(ident) {
-    //             return Some(var);
-    //         }
-    //     }
-
-    //     self.variables.get_mut(ident)
-    // }
 
     pub fn declare(
         &mut self,
@@ -104,7 +139,7 @@ impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus> {
             var_ty = status.ty;
 
             if !status.is_assigned {
-                self.local_assigned_variables.insert(ident.0);
+                self.local_assigned_variables.assign(ident.0);
             }
         } else {
             return Err(SemanticError::NotDeclared { ident });
@@ -120,12 +155,16 @@ impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus> {
         }
     }
 
+    pub fn assign_everything(&mut self) {
+        self.local_assigned_variables.assign_everything();
+    }
+
     fn set_assigned_raw(&mut self, ident: &'src str) {
         if let Some(status) = self.variables.get_mut(ident) {
             status.is_assigned = true;
         } else if let Some(status) = self.get_var(ident) {
             if !status.is_assigned {
-                self.local_assigned_variables.insert(ident);
+                self.local_assigned_variables.assign(ident);
             }
         }
     }
@@ -138,7 +177,7 @@ impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus> {
             }
         }
 
-        if self.local_assigned_variables.contains(ident.0) {
+        if self.local_assigned_variables.is_assigned(ident.0) {
             return Ok(());
         }
 
@@ -167,17 +206,22 @@ impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus> {
         }
     }
 
-    pub fn into_local_assigned_variables(self) -> BTreeSet<&'src str> {
+    pub fn into_local_assigned_variables(self) -> LocalAssignedVariables<'src> {
         self.local_assigned_variables
     }
 
-    pub fn local_assigned_variables(&self) -> &BTreeSet<&'src str> {
+    pub fn local_assigned_variables(&self) -> &LocalAssignedVariables<'src> {
         &self.local_assigned_variables
     }
 
-    pub fn assign_variable_set(&mut self, variables: impl IntoIterator<Item = &'src str>) {
-        for ident in variables {
-            self.set_assigned_raw(ident);
+    pub fn assign_variable_set(&mut self, variables: &LocalAssignedVariables<'src>) {
+        match variables {
+            LocalAssignedVariables::Everything => self.local_assigned_variables.assign_everything(),
+            LocalAssignedVariables::Vars(variables) => {
+                for ident in variables {
+                    self.set_assigned_raw(ident);
+                }
+            }
         }
     }
 }
