@@ -41,7 +41,7 @@ fn main() {
     };
 
     #[cfg(debug_assertions)]
-    println!("{:?}", program);
+    dbg!(&program);
 
     let analyzed = analyze_program(program, source);
 
