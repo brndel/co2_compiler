@@ -186,7 +186,7 @@ pub fn generate_asm(
                         UnaryOperator::Minus => {
                             instructions.push(Instruction::Negate { reg });
                         }
-                        UnaryOperator::LogicNot => instructions.push(Instruction::BitNot { reg }),
+                        UnaryOperator::LogicNot => instructions.push(Instruction::LogicNot { reg }),
                         UnaryOperator::BitNot => instructions.push(Instruction::BitNot { reg }),
                     }
                 }

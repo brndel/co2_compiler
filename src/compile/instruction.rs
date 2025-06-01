@@ -53,6 +53,9 @@ pub enum Instruction {
     Negate {
         reg: Register,
     },
+    LogicNot {
+        reg: Register,
+    },
     BitNot {
         reg: Register,
     },
@@ -184,6 +187,7 @@ impl Display for Instruction {
                 }
             }
             Instruction::Negate { reg } => write!(f, "neg {}", reg),
+            Instruction::LogicNot { reg } => write!(f, "xor {}, {}", Value::Immediate(1), reg),
             Instruction::BitNot { reg } => write!(f, "notl {}", reg),
             Instruction::Return { value } => {
                 writeln!(f, "mov {}, {}", value, SystemRegister::Eax)?;
