@@ -113,9 +113,9 @@ fn validate_statement<'a, Num>(
                 let then_vars = then_namespace.into_local_assigned_variables();
                 let else_vars = else_namespace.into_local_assigned_variables();
 
-                let combined_assignments = then_vars.intersection(else_vars);
+                let combined_assignments = then_vars.intersection(&else_vars).cloned();
 
-                namespace.assign_variable_set(&combined_assignments);
+                namespace.assign_variable_set(combined_assignments);
             }
         }
         Statement::While {
@@ -158,7 +158,7 @@ fn validate_statement<'a, Num>(
             }
 
             if let Some(init_vars) = init_vars {
-                namespace.assign_variable_set(&init_vars);
+                namespace.assign_variable_set(init_vars);
             }
         }
         Statement::Return { value: expr } => {
@@ -178,7 +178,7 @@ fn validate_statement<'a, Num>(
 
             let assigned_vars = inner.into_local_assigned_variables();
 
-            namespace.assign_variable_set(&assigned_vars);
+            namespace.assign_variable_set(assigned_vars);
         }
     }
 }
