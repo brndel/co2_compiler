@@ -10,7 +10,10 @@ use chumsky::{
 };
 
 use crate::{
-    core::Type, lexer::{BinaryOperator, Keyword, Operator, Separator, Token, UnaryOperator}, program::Program
+    core::Type,
+    lexer::{BinaryOperator, Keyword, Operator, Separator, Spanned, Token, UnaryOperator},
+    parser::FunctionCall,
+    program::{Function, FunctionParam, Program},
 };
 
 use super::{
@@ -27,23 +30,52 @@ pub fn program_parser<'token, 'src: 'token, I>() -> impl Parser<
 where
     I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
 {
-    let fn_block = parse_block();
+    let function_def = parse_function_defintion();
 
-    let main_name_span = select! {
-        Token::Ident(name) = e if name == "main" => (name, e.span())
+    function_def.repeated().collect().map(|functions| Program {
+        functions,
+    })
+}
+
+pub fn parse_function_defintion<'token, 'src: 'token, I>() -> impl Parser<
+    'token,
+    I,
+    Function<'src, ParseNum<'src>>,
+    extra::Err<Rich<'token, Token<'src>, SimpleSpan>>,
+>
+where
+    I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
+{
+    let ty = parse_ty();
+
+    let ident = select! {
+        Token::Ident(ident) = e => (ident, e.span())
     };
 
-    just(Token::Keyword(Keyword::Int))
-        .ignore_then(main_name_span)
-        .then_ignore(just(Token::Separator(Separator::ParenOpen)))
-        .then_ignore(just(Token::Separator(Separator::ParenClose)))
-        .then(fn_block)
-        .map(|(name, block)| Program {
-            main_fn_span: name,
+    let block = parse_block();
+
+    let param = ty
+        .clone()
+        .then(ident)
+        .map(|(ty, name)| FunctionParam { ty, name });
+
+    ty.then(ident)
+        .then(
+            param
+                .separated_by(just(Token::Separator(Separator::Comma)))
+                .collect()
+                .delimited_by(
+                    just(Token::Separator(Separator::ParenOpen)),
+                    just(Token::Separator(Separator::ParenClose)),
+                ),
+        )
+        .then(block)
+        .map(|(((return_type, ident), params), block)| Function {
+            return_type,
+            ident,
+            params,
             block,
-        })
-        .labelled("main fn")
-        .as_context()
+        }).labelled("function").as_context()
 }
 
 pub fn parse_block<'token, 'src: 'token, I>()
@@ -104,11 +136,7 @@ where
             .map(|((ident, op), value)| Statement::Assignment { ident, op, value })
             .labelled("assign");
 
-        let ty = select! {
-            Token::Keyword(Keyword::Int) => Type::Int,
-            Token::Keyword(Keyword::Bool) => Type::Bool,
-        }
-        .map_with(|ty, extra| (ty, extra.span()));
+        let ty = parse_ty();
 
         let decl = ty
             .then(
@@ -121,6 +149,10 @@ where
             .map(|((ty, ident), value)| Statement::Declaration { ty, ident, value })
             .labelled("declaration");
 
+        let fn_call = parse_function_call(expr.clone()).map(Statement::FunctionCall);
+
+        let simple_statement = assign.or(decl).or(fn_call);
+
         let ret = just(Token::Keyword(Keyword::Return))
             .ignore_then(expr.clone())
             .map(|expr| Statement::Return { value: expr });
@@ -130,7 +162,6 @@ where
             Token::Keyword(Keyword::Continue) = e => Statement::Continue(e.span()),
         };
 
-        let simple_statement = assign.clone().or(decl.clone());
         let control_statement = ret.or(ctrl);
 
         let r#if = just(Token::Keyword(Keyword::If))
@@ -201,6 +232,8 @@ where
     I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
 {
     recursive(|expr| {
+        let fn_call = parse_function_call(expr.clone()).map(Expression::FunctionCall);
+
         let value = select! {
             Token::Ident(ident) = e => Expression::Ident((ident, e.span())),
             Token::DecNum(num) = e => Expression::Num(ParseNum::Dec((num, e.span()))),
@@ -211,7 +244,7 @@ where
         .labelled("value")
         .as_context();
 
-        let atom = value.or(expr.clone().delimited_by(
+        let atom = fn_call.or(value).or(expr.clone().delimited_by(
             just(Token::Separator(Separator::ParenOpen)),
             just(Token::Separator(Separator::ParenClose)),
         ));
@@ -332,17 +365,72 @@ where
 
         let ternary_appendix = just(Token::Operator(Operator::TernaryQuestionMark))
             .ignore_then(expr.clone())
-            .then_ignore(just(Token::Operator(Operator::TernaryColon))).then(expr.clone());
+            .then_ignore(just(Token::Operator(Operator::TernaryColon)))
+            .then(expr.clone());
 
-        let ternary = operators.then(ternary_appendix.or_not()).map(|(condition, values)| {
-            match values {
-                Some((a, b)) => Expression::Ternary { condition: Box::new(condition), a: Box::new(a), b: Box::new(b) },
-                None => condition
-            }
-        });
+        let ternary = operators
+            .then(ternary_appendix.or_not())
+            .map(|(condition, values)| match values {
+                Some((a, b)) => Expression::Ternary {
+                    condition: Box::new(condition),
+                    a: Box::new(a),
+                    b: Box::new(b),
+                },
+                None => condition,
+            });
 
         ternary
     })
     .labelled("expr")
     .as_context()
+}
+
+pub fn parse_function_call<'token, 'src: 'token, I, T>(
+    expr_parser: T,
+) -> impl Parser<
+    'token,
+    I,
+    FunctionCall<'src, ParseNum<'src>>,
+    extra::Err<Rich<'token, Token<'src>, SimpleSpan>>,
+> + Clone
+where
+    I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
+    T: Parser<
+            'token,
+            I,
+            Expression<'src, ParseNum<'src>>,
+            extra::Err<Rich<'token, Token<'src>, SimpleSpan>>,
+        > + Clone
+        + 'token,
+{
+    let ident = select! {
+        Token::Ident(ident) = e => (ident, e.span()),
+        Token::Keyword(Keyword::Print) = e => ("print", e.span()),
+        Token::Keyword(Keyword::Read) = e => ("read", e.span()),
+        Token::Keyword(Keyword::Flush) = e => ("flush", e.span()),
+    };
+
+    ident
+        .then(
+            expr_parser
+                .separated_by(just(Token::Separator(Separator::Comma)))
+                .collect()
+                .delimited_by(
+                    just(Token::Separator(Separator::ParenOpen)),
+                    just(Token::Separator(Separator::ParenClose)),
+                ),
+        )
+        .map(|(ident, args)| FunctionCall { ident, args })
+}
+
+pub fn parse_ty<'token, 'src: 'token, I>()
+-> impl Parser<'token, I, Spanned<Type>, extra::Err<Rich<'token, Token<'src>, SimpleSpan>>> + Clone
+where
+    I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
+{
+    select! {
+        Token::Keyword(Keyword::Int) => Type::Int,
+        Token::Keyword(Keyword::Bool) => Type::Bool,
+    }
+    .map_with(|ty, extra| (ty, extra.span()))
 }

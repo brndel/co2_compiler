@@ -19,7 +19,8 @@ pub fn build_ir_graph<'a>(program: Program<'a>) -> IrGraph<BasicBlock<'a>> {
 
     let mut scope = BlockBuilder::new(start_label, end_label, &mut ctx);
 
-    build_ir_statement(Statement::Block(program.block), &mut ctx, &mut scope);
+    todo!();
+    // build_ir_statement(Statement::Block(program.block), &mut ctx, &mut scope);
 
     scope.close(&mut ctx);
 

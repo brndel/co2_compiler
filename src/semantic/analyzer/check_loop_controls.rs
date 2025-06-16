@@ -9,7 +9,9 @@ pub fn check_loop_controls<'a, Num>(
     errors: &mut Vec<SemanticError<'a>>,
     program: &Program<'a, Num>,
 ) {
-    validate_block(errors, &program.block, false);
+    for func in &program.functions {
+        validate_block(errors, &func.block, false);
+    }
 }
 
 fn validate_block<'a, Num>(
@@ -28,7 +30,7 @@ fn validate_statement<'a, Num>(
     inside_loop: bool,
 ) {
     match &statement {
-        Statement::Declaration { .. } | Statement::Assignment { .. } | Statement::Return { .. } => {
+        Statement::Declaration { .. } | Statement::Assignment { .. } | Statement::Return { .. } | Statement::FunctionCall(_) => {
             ()
         }
         Statement::If {

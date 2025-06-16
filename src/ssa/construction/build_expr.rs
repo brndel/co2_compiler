@@ -77,6 +77,7 @@ pub fn build_ir_expr<'a>(
             "ternary_true",
             "ternary_false",
         ),
+        Expression::FunctionCall(fn_call) => todo!(),
     }
 }
 

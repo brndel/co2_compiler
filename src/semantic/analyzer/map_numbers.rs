@@ -2,8 +2,8 @@ use std::num::IntErrorKind;
 
 use crate::{
     lexer::Spanned,
-    parser::{Block, Expression, ParseNum, Statement, ValueNum},
-    program::Program,
+    parser::{Block, Expression, FunctionCall, ParseNum, Statement, ValueNum},
+    program::{Function, Program},
     semantic::SemanticError,
 };
 
@@ -11,12 +11,27 @@ pub fn map_number<'a>(
     errors: &mut Vec<SemanticError<'a>>,
     program: Program<'a, ParseNum<'a>>,
 ) -> Option<Program<'a>> {
-    let block = map_number_block(errors, program.block)?;
+    let functions = program
+        .functions
+        .into_iter()
+        .map(
+            |Function {
+                 return_type,
+                 ident,
+                 params,
+                 block,
+             }| {
+                Some(Function {
+                    return_type,
+                    ident,
+                    params,
+                    block: map_number_block(errors, block)?,
+                })
+            },
+        )
+        .collect::<Option<_>>()?;
 
-    Some(Program {
-        block,
-        main_fn_span: program.main_fn_span,
-    })
+    Some(Program { functions })
 }
 
 fn map_number_block<'a>(
@@ -59,6 +74,15 @@ fn map_number_statement<'a>(
             op,
             value: map_num_expr(errors, value)?,
         },
+        Statement::FunctionCall(FunctionCall { ident, args }) => {
+            Statement::FunctionCall(FunctionCall {
+                ident,
+                args: args
+                    .into_iter()
+                    .map(|arg| map_num_expr(errors, arg))
+                    .collect::<Option<_>>()?,
+            })
+        }
         Statement::Return { value: expr } => Statement::Return {
             value: map_num_expr(errors, expr)?,
         },
@@ -143,6 +167,15 @@ fn map_num_expr<'a>(
                 a: Box::new(a?),
                 b: Box::new(b?),
             })
+        }
+        Expression::FunctionCall(FunctionCall { ident, args }) => {
+            Some(Expression::FunctionCall(FunctionCall {
+                ident,
+                args: args
+                    .into_iter()
+                    .map(|arg| map_num_expr(errors, arg))
+                    .collect::<Option<_>>()?,
+            }))
         }
     }
 }

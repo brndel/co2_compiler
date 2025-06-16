@@ -26,6 +26,7 @@ pub enum Separator {
     BraceOpen,
     BraceClose,
     Semicolon,
+    Comma
 }
 
 

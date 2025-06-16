@@ -22,6 +22,7 @@ pub enum Statement<'a, Num = ValueNum> {
         op: Option<AssignOperator>,
         value: Expression<'a, Num>,
     },
+    FunctionCall(FunctionCall<'a, Num>),
     If {
         condition: Expression<'a, Num>,
         then: Box<Self>,
@@ -64,6 +65,13 @@ pub enum Expression<'a, Num = ValueNum> {
         a: Box<Self>,
         b: Box<Self>,
     },
+    FunctionCall(FunctionCall<'a, Num>),
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionCall<'a, Num = ValueNum> {
+    pub ident: Spanned<&'a str>,
+    pub args: Vec<Expression<'a, Num>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,50 +1,59 @@
-use chumsky::{error, span::Span};
+use chumsky::span::Span;
 
 use crate::{
     core::Type,
-    lexer::{AssignOperator, BinaryOperator, GetSpan, Spanned, UnaryOperator},
-    parser::{Block, Expression, Statement},
+    lexer::{BinaryOperator, GetSpan, Spanned, UnaryOperator},
+    parser::{Block, Expression, FunctionCall, Statement},
     program::Program,
-    semantic::{Namespace, SemanticError, namespace},
+    semantic::{
+        Namespace, SemanticError,
+        namespace::FunctionNamespace,
+    },
 };
 
-pub fn check_status_and_types<'a, Num>(
-    errors: &mut Vec<SemanticError<'a>>,
-    program: &Program<'a, Num>,
+pub fn check_status_and_types<'src, Num>(
+    errors: &mut Vec<SemanticError<'src>>,
+    program: &Program<'src, Num>,
 ) where
     Num: GetSpan,
 {
-    validate_block(errors, &program.block, None);
+    let functions = FunctionNamespace::new(program, errors);
+
+    for func in &program.functions {
+        validate_block(errors, &func.block, None, &functions);
+    }
 }
 
-fn validate_block<'a, 'b, Num>(
-    errors: &mut Vec<SemanticError<'a>>,
-    block: &Block<'a, Num>,
-    namespace: Option<&'b Namespace<'a, '_>>,
-) -> Namespace<'a, 'b>
+fn validate_block<'src, 'ns, 'program, Num>(
+    errors: &mut Vec<SemanticError<'src>>,
+    block: &Block<'src, Num>,
+    namespace: Option<&'ns Namespace<'src, '_>>,
+    functions: &FunctionNamespace<'src>,
+) -> Namespace<'src, 'ns>
 where
     Num: GetSpan,
 {
     let mut namespace = Namespace::with_parent(namespace);
 
     for statement in &block.statements {
-        validate_statement(errors, statement, &mut namespace)
+        validate_statement(errors, statement, &mut namespace, functions)
     }
 
     namespace
 }
 
-fn validate_statement<'a, Num>(
-    errors: &mut Vec<SemanticError<'a>>,
-    statement: &Statement<'a, Num>,
-    namespace: &mut Namespace<'a, '_>,
+fn validate_statement<'src, Num>(
+    errors: &mut Vec<SemanticError<'src>>,
+    statement: &Statement<'src, Num>,
+    namespace: &mut Namespace<'src, '_>,
+    functions: &FunctionNamespace<'src>,
 ) where
     Num: GetSpan,
 {
     match statement {
         Statement::Declaration { ty, ident, value } => {
             if let Some(value) = value {
-                if let Some(value_ty) = validate_expression(errors, value, &namespace) {
+                if let Some(value_ty) = validate_expression(errors, value, &namespace, functions) {
                     if value_ty.0 != ty.0 {
                         errors.push(SemanticError::MissmatchedType {
                             ty: value_ty,
@@ -59,7 +68,7 @@ fn validate_statement<'a, Num>(
             }
         }
         Statement::Assignment { ident, op, value } => {
-            let Some(value_ty) = validate_expression(errors, value, &namespace) else {
+            let Some(value_ty) = validate_expression(errors, value, &namespace, functions) else {
                 return;
             };
 
@@ -89,12 +98,15 @@ fn validate_statement<'a, Num>(
                 errors.push(err);
             }
         }
+        Statement::FunctionCall(fn_call) => {
+            validate_function_call(errors, fn_call, namespace, functions);
+        }
         Statement::If {
             condition,
             then,
             r#else,
         } => {
-            if let Some(condition_ty) = validate_expression(errors, condition, &namespace) {
+            if let Some(condition_ty) = validate_expression(errors, condition, &namespace, functions) {
                 if condition_ty.0 != Type::Bool {
                     errors.push(SemanticError::MissmatchedType {
                         ty: condition_ty,
@@ -104,11 +116,11 @@ fn validate_statement<'a, Num>(
             };
 
             let mut then_namespace = Namespace::with_parent(Some(namespace));
-            validate_statement(errors, then, &mut then_namespace);
+            validate_statement(errors, then, &mut then_namespace, functions);
 
             if let Some(r#else) = r#else {
                 let mut else_namespace = Namespace::with_parent(Some(namespace));
-                validate_statement(errors, r#else, &mut else_namespace);
+                validate_statement(errors, r#else, &mut else_namespace, functions);
 
                 let then_vars = then_namespace.into_local_assigned_variables();
                 let else_vars = else_namespace.into_local_assigned_variables();
@@ -122,7 +134,7 @@ fn validate_statement<'a, Num>(
             condition,
             body: then,
         } => {
-            if let Some(condition_ty) = validate_expression(errors, condition, &namespace) {
+            if let Some(condition_ty) = validate_expression(errors, condition, &namespace, functions) {
                 if condition_ty.0 != Type::Bool {
                     errors.push(SemanticError::MissmatchedType {
                         ty: condition_ty,
@@ -132,7 +144,7 @@ fn validate_statement<'a, Num>(
             };
 
             let mut inner = Namespace::with_parent(Some(namespace));
-            validate_statement(errors, then, &mut inner);
+            validate_statement(errors, then, &mut inner, functions);
         }
         Statement::For {
             init,
@@ -144,17 +156,17 @@ fn validate_statement<'a, Num>(
             let mut loop_namespace = namespace.new_child();
 
             if let Some(init) = init {
-                validate_statement(errors, init, &mut loop_namespace);
+                validate_statement(errors, init, &mut loop_namespace, functions);
                 let local_vars = loop_namespace.local_assigned_variables().clone();
                 init_vars = Some(local_vars);
             }
-            validate_expression(errors, condition, &mut loop_namespace);
+            validate_expression(errors, condition, &mut loop_namespace, functions);
 
             let mut inner = loop_namespace.new_child();
-            validate_statement(errors, &then, &mut inner);
+            validate_statement(errors, &then, &mut inner, functions);
 
             if let Some(step) = step {
-                validate_statement(errors, step, &mut loop_namespace);
+                validate_statement(errors, step, &mut loop_namespace, functions);
             }
 
             if let Some(init_vars) = init_vars {
@@ -162,7 +174,7 @@ fn validate_statement<'a, Num>(
             }
         }
         Statement::Return { value: expr } => {
-            if let Some(expr_ty) = validate_expression(errors, expr, &namespace) {
+            if let Some(expr_ty) = validate_expression(errors, expr, &namespace, functions) {
                 if expr_ty.0 != Type::Int {
                     errors.push(SemanticError::MissmatchedType {
                         ty: expr_ty,
@@ -174,7 +186,7 @@ fn validate_statement<'a, Num>(
         }
         Statement::Break(_) | Statement::Continue(_) => namespace.assign_everything(),
         Statement::Block(block) => {
-            let inner = validate_block(errors, block, Some(namespace));
+            let inner = validate_block(errors, block, Some(namespace), functions);
 
             let assigned_vars = inner.into_local_assigned_variables();
 
@@ -183,10 +195,11 @@ fn validate_statement<'a, Num>(
     }
 }
 
-fn validate_expression<'a, Num>(
-    errors: &mut Vec<SemanticError<'a>>,
-    expression: &Expression<'a, Num>,
-    namespace: &Namespace<'a, '_>,
+fn validate_expression<'src, Num>(
+    errors: &mut Vec<SemanticError<'src>>,
+    expression: &Expression<'src, Num>,
+    namespace: &Namespace<'src, '_>,
+    functions: &FunctionNamespace<'src>
 ) -> Option<Spanned<Type>>
 where
     Num: GetSpan,
@@ -210,8 +223,8 @@ where
         Expression::Num(value) => Some((Type::Int, value.span())),
         Expression::Bool(value) => Some((Type::Bool, value.span())),
         Expression::Binary { a, op, b } => {
-            let a_ty = validate_expression(errors, &a, namespace);
-            let b_ty = validate_expression(errors, &b, namespace);
+            let a_ty = validate_expression(errors, &a, namespace, functions);
+            let b_ty = validate_expression(errors, &b, namespace, functions);
 
             let a = a_ty?;
             let b = b_ty?;
@@ -244,7 +257,7 @@ where
             }
         }
         Expression::Unary { op, expr } => {
-            let ty = validate_expression(errors, expr, namespace)?;
+            let ty = validate_expression(errors, expr, namespace, functions)?;
             match op {
                 UnaryOperator::Minus | UnaryOperator::BitNot => {
                     if ty.0 == Type::Int {
@@ -271,9 +284,9 @@ where
             }
         }
         Expression::Ternary { condition, a, b } => {
-            let condition_ty = validate_expression(errors, condition, namespace);
-            let a_ty = validate_expression(errors, a, namespace);
-            let b_ty = validate_expression(errors, b, namespace);
+            let condition_ty = validate_expression(errors, condition, namespace, functions);
+            let a_ty = validate_expression(errors, a, namespace, functions);
+            let b_ty = validate_expression(errors, b, namespace, functions);
 
             let condition = condition_ty?;
             let a = a_ty?;
@@ -291,6 +304,9 @@ where
             } else {
                 Some((a.0, condition.1.union(a.1).union(b.1)))
             }
+        },
+        Expression::FunctionCall(fn_call) => {
+            validate_function_call(errors, fn_call, namespace, functions)
         }
     }
 }
@@ -329,4 +345,48 @@ fn check_binary_type<'a>(
             Some((return_ty, a.1.union(b.1)))
         }
     }
+}
+
+fn validate_function_call<'src, Num: GetSpan>(
+    errors: &mut Vec<SemanticError<'src>>,
+    fn_call: &FunctionCall<'src, Num>,
+    namespace: &Namespace<'src, '_>,
+    functions: &FunctionNamespace<'src>,
+) -> Option<Spanned<Type>> {
+    let func = match functions.get_function(fn_call) {
+        Ok(func) => func,
+        Err(err) => {
+            errors.push(err);
+            return None;
+        }
+    };
+
+    for (index, param) in func.params().iter().enumerate() {
+        let arg = match fn_call.args.get(index) {
+            Some(arg) => arg,
+            None => {
+                errors.push(SemanticError::FunctionCallMissingArg {
+                    call_ident: fn_call.ident,
+                    arg_name: param.name.0,
+                });
+                continue;
+            }
+        };
+
+        let ty = match validate_expression(errors, arg, namespace, functions) {
+            Some(ty) => ty,
+            None => continue,
+        };
+
+        if ty.0 != param.ty.0 {
+            errors.push(SemanticError::MissmatchedType { ty, expected_type: param.ty.0 });
+        }
+    }
+
+    if fn_call.args.len() > func.params().len()  {
+        errors.push(SemanticError::FunctionCallTooManyArgs { call_ident: fn_call.ident, arg_count: fn_call.args.len(), expected_count: func.params().len() });
+        return None;
+    }
+
+    Some((func.return_type(), fn_call.ident.span()))
 }

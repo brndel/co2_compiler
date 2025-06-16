@@ -36,6 +36,7 @@ pub fn lexer<'src>()
         '{' => Separator::BraceOpen,
         '}' => Separator::BraceClose,
         ';' => Separator::Semicolon,
+        ',' => Separator::Comma,
     }
     .labelled("separator");
 
