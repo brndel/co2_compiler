@@ -4,10 +4,9 @@ use crate::{
     core::Type,
     lexer::{BinaryOperator, GetSpan, Spanned, UnaryOperator},
     parser::{Block, Expression, FunctionCall, Statement},
-    program::Program,
+    program::{Function, Program},
     semantic::{
-        Namespace, SemanticError,
-        namespace::FunctionNamespace,
+        namespace::FunctionNamespace, Namespace, SemanticError
     },
 };
 
@@ -20,7 +19,15 @@ pub fn check_status_and_types<'src, Num>(
     let functions = FunctionNamespace::new(program, errors);
 
     for func in &program.functions {
-        validate_block(errors, &func.block, None, &functions);
+        let mut namespace = Namespace::new();
+
+        for param in &func.params {
+            if let Err(err) = namespace.declare(param.name, param.ty.0, true) {
+                errors.push(err);
+            }
+        }
+
+        validate_block(errors, &func.block, Some(&namespace), &functions, func);
     }
 }
 
@@ -29,6 +36,7 @@ fn validate_block<'src, 'ns, 'program, Num>(
     block: &Block<'src, Num>,
     namespace: Option<&'ns Namespace<'src, '_>>,
     functions: &FunctionNamespace<'src>,
+    current_function: &Function<'src, Num>
 ) -> Namespace<'src, 'ns>
 where
     Num: GetSpan,
@@ -36,7 +44,7 @@ where
     let mut namespace = Namespace::with_parent(namespace);
 
     for statement in &block.statements {
-        validate_statement(errors, statement, &mut namespace, functions)
+        validate_statement(errors, statement, &mut namespace, functions, current_function)
     }
 
     namespace
@@ -47,6 +55,7 @@ fn validate_statement<'src, Num>(
     statement: &Statement<'src, Num>,
     namespace: &mut Namespace<'src, '_>,
     functions: &FunctionNamespace<'src>,
+    current_function: &Function<'src, Num>
 ) where
     Num: GetSpan,
 {
@@ -116,11 +125,11 @@ fn validate_statement<'src, Num>(
             };
 
             let mut then_namespace = Namespace::with_parent(Some(namespace));
-            validate_statement(errors, then, &mut then_namespace, functions);
+            validate_statement(errors, then, &mut then_namespace, functions, current_function);
 
             if let Some(r#else) = r#else {
                 let mut else_namespace = Namespace::with_parent(Some(namespace));
-                validate_statement(errors, r#else, &mut else_namespace, functions);
+                validate_statement(errors, r#else, &mut else_namespace, functions, current_function);
 
                 let then_vars = then_namespace.into_local_assigned_variables();
                 let else_vars = else_namespace.into_local_assigned_variables();
@@ -144,7 +153,7 @@ fn validate_statement<'src, Num>(
             };
 
             let mut inner = Namespace::with_parent(Some(namespace));
-            validate_statement(errors, then, &mut inner, functions);
+            validate_statement(errors, then, &mut inner, functions, current_function);
         }
         Statement::For {
             init,
@@ -156,17 +165,17 @@ fn validate_statement<'src, Num>(
             let mut loop_namespace = namespace.new_child();
 
             if let Some(init) = init {
-                validate_statement(errors, init, &mut loop_namespace, functions);
+                validate_statement(errors, init, &mut loop_namespace, functions, current_function);
                 let local_vars = loop_namespace.local_assigned_variables().clone();
                 init_vars = Some(local_vars);
             }
             validate_expression(errors, condition, &mut loop_namespace, functions);
 
             let mut inner = loop_namespace.new_child();
-            validate_statement(errors, &then, &mut inner, functions);
+            validate_statement(errors, &then, &mut inner, functions, current_function);
 
             if let Some(step) = step {
-                validate_statement(errors, step, &mut loop_namespace, functions);
+                validate_statement(errors, step, &mut loop_namespace, functions, current_function);
             }
 
             if let Some(init_vars) = init_vars {
@@ -175,10 +184,11 @@ fn validate_statement<'src, Num>(
         }
         Statement::Return { value: expr } => {
             if let Some(expr_ty) = validate_expression(errors, expr, &namespace, functions) {
-                if expr_ty.0 != Type::Int {
+                let return_ty = current_function.return_type.0;
+                if expr_ty.0 != return_ty {
                     errors.push(SemanticError::MissmatchedType {
                         ty: expr_ty,
-                        expected_type: Type::Int,
+                        expected_type: return_ty,
                     });
                 }
             };
@@ -186,7 +196,7 @@ fn validate_statement<'src, Num>(
         }
         Statement::Break(_) | Statement::Continue(_) => namespace.assign_everything(),
         Statement::Block(block) => {
-            let inner = validate_block(errors, block, Some(namespace), functions);
+            let inner = validate_block(errors, block, Some(namespace), functions, current_function);
 
             let assigned_vars = inner.into_local_assigned_variables();
 
