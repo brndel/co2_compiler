@@ -13,6 +13,7 @@ impl<'a> Analyzed<'a> {
     pub fn new(program: Program<'a, ParseNum<'a>>) -> Result<Self, Vec<SemanticError<'a>>> {
         let mut errors = Vec::new();
 
+        analyzer::check_main_fn(&mut errors, &program);
         analyzer::check_status_and_types(&mut errors, &program);
         analyzer::check_loop_controls(&mut errors, &program);
         analyzer::check_return(&mut errors, &program);

@@ -164,7 +164,7 @@ fn analyze_program<'a>(
         Ok(analyzed) => Some(analyzed),
         Err(errors) => {
             for error in errors {
-                let report = Report::build(ReportKind::Error, source.span(error.span()))
+                let report = Report::build(ReportKind::Error, source.span(&error.span()))
                     .with_config(REPORT_CONFIG)
                     .with_message(error.message())
                     .with_labels(error.labels(source))

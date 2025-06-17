@@ -59,43 +59,49 @@ pub enum SemanticError<'a> {
         arg_count: usize,
         expected_count: usize,
     },
+    NoMainFunction,
+    MainFnWithParams {
+        ident: Spanned<&'a str>,
+    },
 }
 
 impl<'a> SemanticError<'a> {
-    pub fn span(&self) -> &SimpleSpan {
+    pub fn span(&self) -> SimpleSpan {
         match self {
             SemanticError::AlreadyDeclared {
                 ident,
                 declared_at: _,
-            } => &ident.1,
-            SemanticError::NotDeclared { ident } => &ident.1,
+            } => ident.1,
+            SemanticError::NotDeclared { ident } => ident.1,
             SemanticError::NotAssigned {
                 ident,
                 declared_at: _,
-            } => &ident.1,
-            SemanticError::NoReturnInFunction { ident } => &ident.1,
-            SemanticError::IntOverflow { ident } => &ident.1,
+            } => ident.1,
+            SemanticError::NoReturnInFunction { ident } => ident.1,
+            SemanticError::IntOverflow { ident } => ident.1,
             SemanticError::MissmatchedType {
                 ty,
                 expected_type: _,
-            } => &ty.1,
-            SemanticError::MissmatchedBinaryType { a, b: _ } => &a.1,
-            SemanticError::LoopControlsOutsideLoop { keyword } => &keyword.1,
-            SemanticError::DeclareInForLoopStep { span } => &span,
+            } => ty.1,
+            SemanticError::MissmatchedBinaryType { a, b: _ } => a.1,
+            SemanticError::LoopControlsOutsideLoop { keyword } => keyword.1,
+            SemanticError::DeclareInForLoopStep { span } => *span,
             SemanticError::FunctionAlreadyDefined {
                 ident,
                 defined_at: _,
-            } => &ident.1,
-            SemanticError::FunctionNotDefined { call_ident } => &call_ident.1,
+            } => ident.1,
+            SemanticError::FunctionNotDefined { call_ident } => call_ident.1,
             SemanticError::FunctionCallMissingArg {
                 call_ident,
                 arg_name: _,
-            } => &call_ident.1,
+            } => call_ident.1,
             SemanticError::FunctionCallTooManyArgs {
                 call_ident,
                 arg_count: _,
                 expected_count: _,
-            } => &call_ident.1,
+            } => call_ident.1,
+            SemanticError::NoMainFunction => SimpleSpan::splat(0),
+            SemanticError::MainFnWithParams { ident } => ident.1,
         }
     }
 
@@ -158,6 +164,10 @@ impl<'a> SemanticError<'a> {
                 "Call to function '{}' has {} args defined, expected {}",
                 call_ident.0, arg_count, expected_count
             ),
+            SemanticError::NoMainFunction => format!("No main function found in program"),
+            SemanticError::MainFnWithParams { ident: _ } => {
+                format!("Main function is not allowed to have parameters")
+            }
         }
     }
 
@@ -208,7 +218,7 @@ impl<'a> SemanticError<'a> {
                 vec![
                     Label::new(source.span(&ident.1)).with_message(self.message()),
                     Label::new(source.span(defined_at))
-                        .with_message(format!("Function '{}' already defined here", ident.0)),
+                        .with_message(format!("Function '{}' first defined here", ident.0)),
                 ]
             }
             SemanticError::FunctionNotDefined { call_ident } => {
@@ -223,6 +233,10 @@ impl<'a> SemanticError<'a> {
                 arg_count: _,
                 expected_count: _,
             } => vec![Label::new(source.span(&call_ident.1)).with_message(self.message())],
+            SemanticError::NoMainFunction => vec![],
+            SemanticError::MainFnWithParams { ident } => {
+                vec![Label::new(source.span(&ident.1)).with_message(self.message())]
+            }
         }
     }
 }
