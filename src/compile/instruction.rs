@@ -1,6 +1,12 @@
 use std::{cell::Ref, fmt::Display};
 
-use crate::{register_alloc::GraphColor, ssa::{BlockLabel, VirtualRegister}};
+use crate::{
+    compile::{
+        register::{FunctionArgRegister, NumRegister, NumRegister64, Register64, StackRegister, SystemRegister}, value::Value, Register
+    },
+    register_alloc::GraphColor,
+    ssa::{BlockLabel, VirtualRegister},
+};
 
 #[derive(Debug)]
 pub enum Instruction<'a> {
@@ -222,7 +228,10 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(f, "jz {}", on_false)?;
                 write!(f, "jmp {}", on_true)
             }
-            Instruction::FunctionProlog { max_register, params } => {
+            Instruction::FunctionProlog {
+                max_register,
+                params,
+            } => {
                 writeln!(f, "push %rbp")?;
                 writeln!(f, "mov %rsp, %rbp")?;
 
@@ -286,28 +295,32 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(f, "ret")
             }
             Instruction::CallFunction { dst, label, params } => {
-                writeln!(f, "push {}", NumRegister64::Temp)?;
+                writeln!(f, "push {}", Register64::Temp)?;
                 writeln!(f, "push {}", NumRegister64::R9)?;
                 writeln!(f, "push {}", NumRegister64::R10)?;
                 writeln!(f, "push {}", NumRegister64::R11)?;
-                
+
                 let mut aligned_param_count = params.len();
                 if aligned_param_count % 2 == 1 {
                     aligned_param_count += 1;
                     writeln!(f, "sub {}, %rsp", Value::Immediate(8))?;
                 }
                 for param in params.iter().rev() {
-                    writeln!(f, "push {}", param)?;
+                    writeln!(f, "push {}", (*param).to_64())?;
                 }
                 writeln!(f, "call {}", label)?;
                 if aligned_param_count != 0 {
-                    writeln!(f, "add {}, %rsp", Value::Immediate(aligned_param_count as i32 * 8))?;
+                    writeln!(
+                        f,
+                        "add {}, %rsp",
+                        Value::Immediate(aligned_param_count as i32 * 8)
+                    )?;
                 }
 
                 writeln!(f, "pop {}", NumRegister64::R11)?;
                 writeln!(f, "pop {}", NumRegister64::R10)?;
                 writeln!(f, "pop {}", NumRegister64::R9)?;
-                writeln!(f, "pop {}", NumRegister64::Temp)?;
+                writeln!(f, "pop {}", Register64::Temp)?;
                 if let Some(dst) = dst {
                     write!(f, "mov {}, {}", SystemRegister::Eax, dst)?
                 }
@@ -316,164 +329,5 @@ impl<'a> Display for Instruction<'a> {
             }
             Instruction::GlobalLabel { label } => write!(f, ".global {}", label),
         }
-    }
-}
-
-#[derive(Debug)]
-pub enum Value {
-    Register(Register),
-    Immediate(i32),
-}
-
-impl Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Register(register) => register.fmt(f),
-            Value::Immediate(value) => write!(f, "${}", value),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub enum Register {
-    #[default]
-    Temp,
-    Num(NumRegister),
-    Stack(StackRegister),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum SystemRegister {
-    Eax,
-    Ebx,
-    Ecx,
-    Edx,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum NumRegister {
-    // R8,
-    R9,
-    R10,
-    R11,
-    R12,
-    R13,
-    R14,
-    R15,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum NumRegister64 {
-    Temp,
-    R9,
-    R10,
-    R11,
-    R12,
-    R13,
-    R14,
-    R15,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct StackRegister(pub usize);
-
-struct FunctionArgRegister(pub usize);
-
-impl<T: Into<Register>> From<T> for Value {
-    fn from(value: T) -> Self {
-        Value::Register(value.into())
-    }
-}
-
-impl From<NumRegister> for Register {
-    fn from(value: NumRegister) -> Self {
-        Self::Num(value)
-    }
-}
-
-impl From<StackRegister> for Register {
-    fn from(value: StackRegister) -> Self {
-        Self::Stack(value)
-    }
-}
-
-impl Display for SystemRegister {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SystemRegister::Eax => write!(f, "%eax"),
-            SystemRegister::Ebx => write!(f, "%ebx"),
-            SystemRegister::Ecx => write!(f, "%ecx"),
-            SystemRegister::Edx => write!(f, "%edx"),
-        }
-    }
-}
-
-impl Display for Register {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Register::Temp => write!(f, "%r8d"),
-            Register::Num(num_register) => num_register.fmt(f),
-            Register::Stack(stack_register) => stack_register.fmt(f),
-        }
-    }
-}
-
-impl Display for NumRegister {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            // NumRegister::R8 => write!(f, "%r8d"),
-            NumRegister::R9 => write!(f, "%r9d"),
-            NumRegister::R10 => write!(f, "%r10d"),
-            NumRegister::R11 => write!(f, "%r11d"),
-            NumRegister::R12 => write!(f, "%r12d"),
-            NumRegister::R13 => write!(f, "%r13d"),
-            NumRegister::R14 => write!(f, "%r14d"),
-            NumRegister::R15 => write!(f, "%r15d"),
-        }
-    }
-}
-
-impl Display for NumRegister64 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            NumRegister64::Temp => write!(f, "%r8"),
-            NumRegister64::R9 => write!(f, "%r9"),
-            NumRegister64::R10 => write!(f, "%r10"),
-            NumRegister64::R11 => write!(f, "%r11"),
-            NumRegister64::R12 => write!(f, "%r12"),
-            NumRegister64::R13 => write!(f, "%r13"),
-            NumRegister64::R14 => write!(f, "%r14"),
-            NumRegister64::R15 => write!(f, "%r15"),
-        }
-    }
-}
-
-impl Display for StackRegister {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "-{}(%rbp)", self.0 * 4)
-    }
-}
-
-impl Display for FunctionArgRegister {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let offset =  (self.0 + 1) * 8 + 8;
-        write!(f, "{}(%rbp)", offset)
-    }
-}
-
-impl GraphColor for Register {
-    fn ascending_iter() -> impl Iterator<Item = Self> {
-        [
-            // Register::Num(NumRegister::R8),
-            Register::Num(NumRegister::R9),
-            Register::Num(NumRegister::R10),
-            Register::Num(NumRegister::R11),
-            Register::Num(NumRegister::R12),
-            Register::Num(NumRegister::R13),
-            Register::Num(NumRegister::R14),
-            Register::Num(NumRegister::R15),
-        ]
-        .into_iter()
-        .chain((1..).map(|i| Register::Stack(StackRegister(i))))
     }
 }

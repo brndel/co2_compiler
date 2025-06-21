@@ -1,7 +1,9 @@
 mod instruction;
 mod codegen;
+mod value;
+mod register;
 
-pub use instruction::Register;
+pub use register::Register;
 pub use codegen::generate_asm;
 
 use instruction::Instruction;

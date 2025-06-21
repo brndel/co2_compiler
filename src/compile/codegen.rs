@@ -1,15 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    lexer::{BinaryOperator, Operator, UnaryOperator},
-    ssa::{
+    compile::value::Value, lexer::{BinaryOperator, Operator, UnaryOperator}, ssa::{
         BasicBlock, BasicBlockEnd, BlockLabel, FunctionIrGraph, IrGraph, SsaInstruction, SsaValue, VirtualRegister
-    },
+    }
 };
 
 use super::{
     Register,
-    instruction::{CompareOp, Instruction, Value},
+    instruction::{CompareOp, Instruction},
 };
 
 pub fn generate_asm<'a>(
