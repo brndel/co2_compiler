@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    compile::value::Value, lexer::{BinaryOperator, Operator, UnaryOperator}, ssa::{
+    compile::{instruction::{BuiltinFuntion, FunctionPointer}, value::Value}, lexer::{BinaryOperator, Operator, UnaryOperator}, ssa::{
         BasicBlock, BasicBlockEnd, BlockLabel, FunctionIrGraph, IrGraph, SsaInstruction, SsaValue, VirtualRegister
     }
 };
@@ -193,8 +193,13 @@ pub fn generate_asm<'a>(
                 SsaInstruction::FunctionCall { target, name, args } => {
                     let dst = target.map(|target| registers[&target]);
                     let params = args.into_iter().map(|arg| transform_value(arg, registers)).collect();
-                    let label = func_labels[name];
-                    instructions.push(Instruction::CallFunction { dst, label, params });
+                    let func = match *name {
+                        "print" => FunctionPointer::Builtin(BuiltinFuntion::Print),
+                        "read" => FunctionPointer::Builtin(BuiltinFuntion::Read),
+                        "flush" => FunctionPointer::Builtin(BuiltinFuntion::Flush),
+                        _ => FunctionPointer::User { label: func_labels[name] }
+                    };
+                    instructions.push(Instruction::CallFunction { dst, func, params });
                 },
             }
         }

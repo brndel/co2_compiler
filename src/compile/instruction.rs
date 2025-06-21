@@ -2,7 +2,12 @@ use std::{cell::Ref, fmt::Display};
 
 use crate::{
     compile::{
-        register::{FunctionArgRegister, NumRegister, NumRegister64, Register64, StackRegister, SystemRegister}, value::Value, Register
+        Register,
+        register::{
+            FunctionArgRegister, NumRegister, NumRegister64, Register64, StackRegister,
+            SystemRegister,
+        },
+        value::Value,
     },
     register_alloc::GraphColor,
     ssa::{BlockLabel, VirtualRegister},
@@ -95,13 +100,26 @@ pub enum Instruction<'a> {
         on_false: BlockLabel<'a>,
     },
     CallFunction {
-        label: BlockLabel<'a>,
+        func: FunctionPointer<'a>,
         dst: Option<Register>,
         params: Vec<Value>,
     },
     GlobalLabel {
         label: BlockLabel<'a>,
     },
+}
+
+#[derive(Debug)]
+pub enum FunctionPointer<'a> {
+    User { label: BlockLabel<'a> },
+    Builtin(BuiltinFuntion),
+}
+
+#[derive(Debug)]
+pub enum BuiltinFuntion {
+    Print,
+    Read,
+    Flush,
 }
 
 #[derive(Debug)]
@@ -294,27 +312,47 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(f, "leave")?;
                 writeln!(f, "ret")
             }
-            Instruction::CallFunction { dst, label, params } => {
+            Instruction::CallFunction { dst, func, params } => {
                 writeln!(f, "push {}", Register64::Temp)?;
                 writeln!(f, "push {}", NumRegister64::R9)?;
                 writeln!(f, "push {}", NumRegister64::R10)?;
                 writeln!(f, "push {}", NumRegister64::R11)?;
 
-                let mut aligned_param_count = params.len();
-                if aligned_param_count % 2 == 1 {
-                    aligned_param_count += 1;
-                    writeln!(f, "sub {}, %rsp", Value::Immediate(8))?;
-                }
-                for param in params.iter().rev() {
-                    writeln!(f, "push {}", (*param).to_64())?;
-                }
-                writeln!(f, "call {}", label)?;
-                if aligned_param_count != 0 {
-                    writeln!(
-                        f,
-                        "add {}, %rsp",
-                        Value::Immediate(aligned_param_count as i32 * 8)
-                    )?;
+                match func {
+                    FunctionPointer::User { label } => {
+                        let mut aligned_param_count = params.len();
+                        if aligned_param_count % 2 == 1 {
+                            aligned_param_count += 1;
+                            writeln!(f, "sub {}, %rsp", Value::Immediate(8))?;
+                        }
+                        for param in params.iter().rev() {
+                            writeln!(f, "push {}", (*param).to_64())?;
+                        }
+                        writeln!(f, "call {}", label)?;
+                        if aligned_param_count != 0 {
+                            writeln!(
+                                f,
+                                "add {}, %rsp",
+                                Value::Immediate(aligned_param_count as i32 * 8)
+                            )?;
+                        }
+                    }
+                    FunctionPointer::Builtin(builtin_funtion) => {
+                        match builtin_funtion {
+                            BuiltinFuntion::Print => {
+                                let param = params[0];
+                                writeln!(f, "mov {}, {}", param, SystemRegister::Eax)?;
+                                writeln!(f, "call putchar")?;
+                            },
+                            BuiltinFuntion::Read => {
+                                writeln!(f, "call getchar")?;
+                            },
+                            BuiltinFuntion::Flush => {
+                                writeln!(f, "mov stdout, {}", SystemRegister::Eax)?;
+                                writeln!(f, "call fflush")?;
+                            },
+                        }
+                    },
                 }
 
                 writeln!(f, "pop {}", NumRegister64::R11)?;
