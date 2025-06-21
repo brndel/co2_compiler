@@ -4,12 +4,12 @@ use crate::{
 };
 
 use super::{
-    build_expr::build_ir_expr,
+    build_expr::{build_fn_call, build_ir_expr},
     builder::{BlockBuilder, Context, Loop},
 };
 
 pub fn build_ir_statement<'a>(
-    statement: Statement<'a>,
+    statement: &Statement<'a>,
     ctx: &mut Context<'a>,
     builder: &mut BlockBuilder<'a>,
 ) {
@@ -44,7 +44,7 @@ pub fn build_ir_statement<'a>(
                     builder.push_instruction(SsaInstruction::BinaryOp {
                         target,
                         a: SsaValue::Register(current_value),
-                        op: op.into(),
+                        op: (*op).into(),
                         b: value,
                     });
                 }
@@ -59,7 +59,7 @@ pub fn build_ir_statement<'a>(
             builder.set_variable(ident.0, target);
         }
         Statement::FunctionCall(fn_call) => {
-            todo!()
+            build_fn_call(fn_call, None, ctx, builder);
         },
         Statement::If {
             condition,
@@ -86,12 +86,12 @@ pub fn build_ir_statement<'a>(
             );
 
             let mut then_scope = BlockBuilder::new(then_label, next_label, ctx);
-            build_ir_statement(*then, ctx, &mut then_scope);
+            build_ir_statement(then, ctx, &mut then_scope);
             then_scope.close(ctx);
 
             if let Some(r#else) = r#else {
                 let mut else_scope = BlockBuilder::new(else_label, next_label, ctx);
-                build_ir_statement(*r#else, ctx, &mut else_scope);
+                build_ir_statement(r#else, ctx, &mut else_scope);
                 else_scope.close(ctx);
             }
         }
@@ -125,7 +125,7 @@ pub fn build_ir_statement<'a>(
                     end: next_label,
                 });
                 let mut body_scope = BlockBuilder::new(body_label, condition_label, ctx);
-                build_ir_statement(*body, ctx, &mut body_scope);
+                build_ir_statement(body, ctx, &mut body_scope);
                 body_scope.close(ctx);
                 ctx.pop_loop();
             }
@@ -159,7 +159,7 @@ pub fn build_ir_statement<'a>(
 
             if let Some(init) = init {
                 let mut init_scope = BlockBuilder::new(init_label, condition_label, ctx);
-                build_ir_statement(*init, ctx, &mut init_scope);
+                build_ir_statement(init, ctx, &mut init_scope);
                 init_scope.close(ctx);
             }
 
@@ -179,7 +179,7 @@ pub fn build_ir_statement<'a>(
 
             if let Some(step) = step {
                 let mut step_scope = BlockBuilder::new(step_label, condition_label, ctx).unsealed();
-                build_ir_statement(*step, ctx, &mut step_scope);
+                build_ir_statement(step, ctx, &mut step_scope);
                 step_scope.close(ctx);
             }
 
@@ -189,7 +189,7 @@ pub fn build_ir_statement<'a>(
                     end: next_label,
                 });
                 let mut body_scope = BlockBuilder::new(body_label, step_label, ctx);
-                build_ir_statement(*body, ctx, &mut body_scope);
+                build_ir_statement(body, ctx, &mut body_scope);
                 body_scope.close(ctx);
                 ctx.pop_loop();
             }
@@ -212,7 +212,7 @@ pub fn build_ir_statement<'a>(
             builder.close_with(BasicBlockEnd::Goto { label: loop_next }, ctx);
         }
         Statement::Block(block) => {
-            for statement in block.statements {
+            for statement in &block.statements {
                 if builder.is_closed() {
                     break;
                 }

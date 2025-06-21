@@ -11,7 +11,7 @@ use super::{Line, LivelinessContainer};
 pub struct LivelinessGraph<'a> {
     vertices: BTreeSet<VirtualRegister<'a>>,
     edges: BTreeMap<VirtualRegister<'a>, BTreeSet<VirtualRegister<'a>>>,
-    visited_blocks: BTreeSet<BlockLabel>,
+    visited_blocks: BTreeSet<BlockLabel<'a>>,
 }
 
 impl<'a> LivelinessGraph<'a> {
@@ -34,7 +34,7 @@ impl<'a> LivelinessGraph<'a> {
 
     fn insert_line(
         &mut self,
-        line: &Line,
+        line: &Line<'a>,
         ir_graph: &IrGraph<BasicBlock<'a>>,
         container: &LivelinessContainer<'a>,
     ) {
@@ -118,7 +118,7 @@ impl<'a> LivelinessGraph<'a> {
         }
     }
 
-    pub fn visited_blocks(&self) -> &BTreeSet<BlockLabel> {
+    pub fn visited_blocks(&self) -> &BTreeSet<BlockLabel<'a>> {
         &self.visited_blocks
     }
 

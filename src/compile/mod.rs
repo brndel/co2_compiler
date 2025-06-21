@@ -21,7 +21,7 @@ pub fn compile_code(output: impl AsRef<Path>, instructions: Vec<Instruction>, bu
     
         fs::write(&temp_file_path, assembly).expect("could not write to temp .s file");
     } else {
-        dbg!("NOT GENERATING ASSEMBLY FILE - build_asm is false");
+        println!("NOT GENERATING ASSEMBLY FILE, USING {} - build_asm is false", temp_file_path.display());
     }
 
     #[cfg(target_arch = "x86_64")]

@@ -3,7 +3,7 @@ use std::fmt::Display;
 use super::{SsaInstruction, SsaValue, counter::Counter, ir_graph::IrGraphNode};
 
 pub struct BasicBlock<'a> {
-    pub label: BlockLabel,
+    pub label: BlockLabel<'a>,
     pub instructions: Vec<SsaInstruction<'a>>,
     pub end: BasicBlockEnd<'a>,
 }
@@ -23,7 +23,7 @@ impl<'a> Display for BasicBlock<'a> {
 }
 
 impl<'a> IrGraphNode for BasicBlock<'a> {
-    type Id = BlockLabel;
+    type Id = BlockLabel<'a>;
 
     fn id(&self) -> Self::Id {
         self.label
@@ -35,18 +35,18 @@ impl<'a> IrGraphNode for BasicBlock<'a> {
 }
 
 #[derive(Debug, Clone, Copy, Eq)]
-pub struct BlockLabel {
+pub struct BlockLabel<'a> {
     id: usize,
-    tag: Option<&'static str>,
+    tag: Option<&'a str>,
 }
 
-impl BlockLabel {
+impl<'a> BlockLabel<'a> {
     pub fn id(&self) -> usize {
         self.id
     }
 }
 
-impl From<usize> for BlockLabel {
+impl<'a> From<usize> for BlockLabel<'a> {
     fn from(value: usize) -> Self {
         Self {
             id: value,
@@ -55,7 +55,7 @@ impl From<usize> for BlockLabel {
     }
 }
 
-impl Display for BlockLabel {
+impl<'a> Display for BlockLabel<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let tag = self.tag.unwrap_or("label");
 
@@ -63,26 +63,32 @@ impl Display for BlockLabel {
     }
 }
 
-impl PartialEq for BlockLabel {
+impl<'a> PartialEq for BlockLabel<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl PartialOrd for BlockLabel {
+impl<'a> PartialOrd for BlockLabel<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.id.partial_cmp(&other.id)
     }
 }
 
-impl Ord for BlockLabel {
+impl<'a> Ord for BlockLabel<'a> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.id.cmp(&other.id)
     }
 }
 
+impl<'a> BlockLabel<'a> {
+    pub fn function(name: &'a str) -> Self {
+        Self { id: 0, tag: Some(name) }
+    }
+}
+
 impl Counter {
-    pub fn next_block_label(&mut self, tag: &'static str) -> BlockLabel {
+    pub fn next_block_label<'a>(&mut self, tag: &'a str) -> BlockLabel<'a> {
         let mut label: BlockLabel = self.next();
 
         label.tag = Some(tag);
@@ -93,15 +99,15 @@ impl Counter {
 
 pub enum BasicBlockEnd<'a> {
     Goto {
-        label: BlockLabel,
+        label: BlockLabel<'a>,
     },
     Return {
         value: SsaValue<'a>,
     },
     ConditionalJump {
         condition: SsaValue<'a>,
-        on_true: BlockLabel,
-        on_false: BlockLabel,
+        on_true: BlockLabel<'a>,
+        on_false: BlockLabel<'a>,
     },
 }
 

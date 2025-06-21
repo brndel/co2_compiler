@@ -2,53 +2,58 @@ use chumsky::span::SimpleSpan;
 
 use crate::{
     lexer::BinaryOperator,
-    parser::Expression,
-    ssa::{SsaInstruction, SsaValue, basic_block::BasicBlockEnd},
+    parser::{Expression, FunctionCall},
+    ssa::{basic_block::BasicBlockEnd, SsaInstruction, SsaValue, VirtualRegister},
 };
 
 use super::builder::{BlockBuilder, Context};
 
 pub fn build_ir_expr<'a>(
-    expr: Expression<'a>,
+    expr: &Expression<'a>,
     ctx: &mut Context<'a>,
     builder: &mut BlockBuilder<'a>,
 ) -> SsaValue<'a> {
     match expr {
         Expression::Ident(ident) => SsaValue::Register(builder.get_variable(ident.0, ctx)),
         Expression::Num(num) => SsaValue::ImmediateNum(num.num()),
-        Expression::Bool((value, _)) => SsaValue::ImmediateBool(value),
+        Expression::Bool((value, _)) => SsaValue::ImmediateBool(*value),
         Expression::Binary { a, op, b } => match op {
             BinaryOperator::LogicAnd => build_ir_ternary(
-                *a,
-                *b,
-                Expression::Bool((false, SimpleSpan::new(0, 0))),
+                a,
+                b,
+                &Expression::Bool((false, SimpleSpan::new(0, 0))),
                 ctx,
                 builder,
                 "and_true",
                 "and_false",
             ),
             BinaryOperator::LogicOr => build_ir_ternary(
-                *a,
-                Expression::Bool((true, SimpleSpan::new(0, 0))),
-                *b,
+                a,
+                &Expression::Bool((true, SimpleSpan::new(0, 0))),
+                b,
                 ctx,
                 builder,
                 "or_true",
                 "or_false",
             ),
             op => {
-                let a = build_ir_expr(*a, ctx, builder);
-                let b = build_ir_expr(*b, ctx, builder);
+                let a = build_ir_expr(a, ctx, builder);
+                let b = build_ir_expr(b, ctx, builder);
 
                 let target = ctx.counter.next();
 
-                builder.push_instruction(SsaInstruction::BinaryOp { target, a, op, b });
+                builder.push_instruction(SsaInstruction::BinaryOp {
+                    target,
+                    a,
+                    op: *op,
+                    b,
+                });
 
                 SsaValue::Register(target)
             }
         },
         Expression::Unary { op, expr } => {
-            let value = build_ir_expr(*expr, ctx, builder);
+            let value = build_ir_expr(expr, ctx, builder);
 
             let value = match value {
                 SsaValue::Register(virtual_register) => virtual_register,
@@ -64,27 +69,36 @@ pub fn build_ir_expr<'a>(
             };
 
             let target = ctx.counter.next();
-            builder.push_instruction(SsaInstruction::UnaryOp { target, op, value });
+            builder.push_instruction(SsaInstruction::UnaryOp {
+                target,
+                op: *op,
+                value,
+            });
 
             SsaValue::Register(target)
         }
         Expression::Ternary { condition, a, b } => build_ir_ternary(
-            *condition,
-            *a,
-            *b,
+            &condition,
+            &a,
+            &b,
             ctx,
             builder,
             "ternary_true",
             "ternary_false",
         ),
-        Expression::FunctionCall(fn_call) => todo!(),
+        Expression::FunctionCall(fn_call) => {
+            let target = ctx.counter.next();
+            build_fn_call(fn_call, Some(target), ctx, builder);
+
+            SsaValue::Register(target)
+        }
     }
 }
 
 fn build_ir_ternary<'a>(
-    condition: Expression<'a>,
-    true_expr: Expression<'a>,
-    false_expr: Expression<'a>,
+    condition: &Expression<'a>,
+    true_expr: &Expression<'a>,
+    false_expr: &Expression<'a>,
     ctx: &mut Context<'a>,
     builder: &mut BlockBuilder<'a>,
     true_label: &'static str,
@@ -132,4 +146,21 @@ fn build_ir_ternary<'a>(
     false_scope.close(ctx);
 
     SsaValue::Register(target)
+}
+
+pub fn build_fn_call<'a>(
+    fn_call: &FunctionCall<'a>,
+    target: Option<VirtualRegister<'a>>,
+    ctx: &mut Context<'a>,
+    builder: &mut BlockBuilder<'a>,
+) {
+    let args = fn_call.args
+        .iter()
+        .map(|arg| build_ir_expr(arg, ctx, builder))
+        .collect();
+    builder.push_instruction(SsaInstruction::FunctionCall {
+        target,
+        name: fn_call.ident.0,
+        args,
+    });
 }

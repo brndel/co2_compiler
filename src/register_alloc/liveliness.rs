@@ -8,12 +8,12 @@ use crate::ssa::{
 };
 
 pub struct LivelinessContainer<'a> {
-    lines: BTreeMap<Line, BTreeSet<VirtualRegister<'a>>>,
+    lines: BTreeMap<Line<'a>, BTreeSet<VirtualRegister<'a>>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Line {
-    pub block: BlockLabel,
+pub struct Line<'a> {
+    pub block: BlockLabel<'a>,
     pub line: usize,
 }
 
@@ -39,8 +39,8 @@ impl<'a> LivelinessContainer<'a> {
 
     fn check_line(
         &mut self,
-        line: &Line,
-        previous_line: Option<&Line>,
+        line: &Line<'a>,
+        previous_line: Option<&Line<'a>>,
         graph: &IrGraph<BasicBlock<'a>>,
     ) {
         if let Some(previous_line) = previous_line {
@@ -86,7 +86,10 @@ impl<'a> LivelinessContainer<'a> {
                     self.remove_live(line, target);
                     self.add_live(line, &SsaValue::Register(*value));
                 }
-                SsaInstruction::FunctionCall { name: _, args } => {
+                SsaInstruction::FunctionArg { index: _, target } => {
+                    self.remove_live(line, target);
+                }
+                SsaInstruction::FunctionCall { target: _, name: _, args } => {
                     for arg in args {
                         self.add_live(line, arg);
                     }
@@ -119,7 +122,7 @@ impl<'a> LivelinessContainer<'a> {
         }
     }
 
-    fn update_live(&mut self, line: &Line, previous_line: &Line) -> bool {
+    fn update_live(&mut self, line: &Line<'a>, previous_line: &Line<'a>) -> bool {
         let mut did_change = false;
 
         let previous_set = self.lines.get(previous_line).unwrap().clone();
@@ -138,7 +141,7 @@ impl<'a> LivelinessContainer<'a> {
         return did_change;
     }
 
-    fn add_live(&mut self, line: &Line, value: &SsaValue<'a>) {
+    fn add_live(&mut self, line: &Line<'a>, value: &SsaValue<'a>) {
         let set = self.lines.entry(*line).or_insert_with(BTreeSet::new);
 
         match value {
@@ -149,12 +152,12 @@ impl<'a> LivelinessContainer<'a> {
         }
     }
 
-    fn remove_live(&mut self, line: &Line, value: &VirtualRegister<'a>) {
+    fn remove_live(&mut self, line: &Line<'a>, value: &VirtualRegister<'a>) {
         let set = self.lines.entry(*line).or_insert_with(BTreeSet::new);
         set.remove(value);
     }
 
-    pub fn get_live_set(&self, line: &Line) -> &BTreeSet<VirtualRegister<'a>> {
+    pub fn get_live_set(&self, line: &Line<'a>) -> &BTreeSet<VirtualRegister<'a>> {
         self.lines.get(line).unwrap()
     }
 }

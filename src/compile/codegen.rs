@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::{
     lexer::{BinaryOperator, Operator, UnaryOperator},
     ssa::{
-        BasicBlock, BasicBlockEnd, BlockLabel, IrGraph, SsaInstruction, SsaValue, VirtualRegister,
+        BasicBlock, BasicBlockEnd, BlockLabel, FunctionIrGraph, IrGraph, SsaInstruction, SsaValue, VirtualRegister
     },
 };
 
@@ -12,25 +12,32 @@ use super::{
     instruction::{CompareOp, Instruction, Value},
 };
 
-pub fn generate_asm(
-    ir_graph: IrGraph<BasicBlock>,
+pub fn generate_asm<'a>(
+    func: &FunctionIrGraph<'a>,
     registers: &BTreeMap<VirtualRegister, Register>,
-    visited_blocks: &BTreeSet<BlockLabel>,
-) -> Vec<Instruction> {
+    visited_blocks: &BTreeSet<BlockLabel<'a>>,
+    func_labels: &BTreeMap<&'a str, BlockLabel<'a>>,
+) -> Vec<Instruction<'a>> {
     let mut instructions = Vec::new();
 
     let max_register = registers.values().max().cloned().unwrap_or_default();
 
-    instructions.push(Instruction::FunctionProlog { max_register });
 
-    for block in ir_graph {
+    for block in &func.graph {
         if !visited_blocks.contains(&block.label) {
             continue;
         }
 
-        instructions.push(Instruction::Label { label: block.label });
+        if block.label.id() == 0 {
+            instructions.push(Instruction::GlobalLabel { label: block.label });
+            instructions.push(Instruction::Label { label: block.label });
+            let params = func.params.iter().map(|param| registers[param]).collect();
+            instructions.push(Instruction::FunctionProlog { max_register, params });
+        } else {
+            instructions.push(Instruction::Label { label: block.label });
+        }
 
-        for instr in block.instructions {
+        for instr in &block.instructions {
             match instr {
                 SsaInstruction::Move { target, source } => {
                     let dst = registers[&target];
@@ -181,17 +188,26 @@ pub fn generate_asm(
                         UnaryOperator::BitNot => instructions.push(Instruction::BitNot { reg }),
                     }
                 }
-                SsaInstruction::FunctionCall { name, args } => todo!(),
+                SsaInstruction::FunctionArg { index, target } => {
+                    
+                }
+                SsaInstruction::FunctionCall { target, name, args } => {
+                    let dst = target.map(|target| registers[&target]);
+                    let params = args.into_iter().map(|arg| transform_value(arg, registers)).collect();
+                    let label = func_labels[name];
+                    instructions.push(Instruction::CallFunction { dst, label, params });
+                },
             }
         }
 
-        match block.end {
+        match &block.end {
             BasicBlockEnd::Goto { label } => {
-                instructions.push(Instruction::Jump { dst: label });
+                instructions.push(Instruction::Jump { dst: *label });
             }
             BasicBlockEnd::Return { value } => {
                 instructions.push(Instruction::Return {
                     value: transform_value(value, registers),
+                    max_register
                 });
             }
             BasicBlockEnd::ConditionalJump {
@@ -211,8 +227,8 @@ pub fn generate_asm(
                 };
                 instructions.push(Instruction::JumpConditional {
                     condition,
-                    on_true,
-                    on_false,
+                    on_true: *on_true,
+                    on_false: *on_false,
                 });
             }
         };
@@ -221,10 +237,10 @@ pub fn generate_asm(
     instructions
 }
 
-fn transform_value(value: SsaValue, registers: &BTreeMap<VirtualRegister, Register>) -> Value {
+fn transform_value(value: &SsaValue, registers: &BTreeMap<VirtualRegister, Register>) -> Value {
     match value {
         SsaValue::Register(virtual_register) => Value::Register(registers[&virtual_register]),
-        SsaValue::ImmediateNum(value) => Value::Immediate(value),
+        SsaValue::ImmediateNum(value) => Value::Immediate(*value),
         SsaValue::ImmediateBool(value) => Value::Immediate(value.then_some(1).unwrap_or(0)),
     }
 }

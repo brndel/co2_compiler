@@ -12,7 +12,7 @@ use super::{AssignPhi, ConBasicBlock, PhiAssignment};
 #[derive(Default)]
 pub struct Context<'a> {
     pub counter: Counter,
-    loops: Vec<Loop>,
+    loops: Vec<Loop<'a>>,
     graph: IrGraph<ConBasicBlock<'a>>,
 }
 
@@ -32,7 +32,7 @@ impl<'a> Context<'a> {
     fn get_var_recursive<End>(
         &mut self,
         var: &'a str,
-        label: &BlockLabel,
+        label: &BlockLabel<'a>,
         mut block: Option<&mut ConBasicBlock<'a, End>>,
     ) -> VirtualRegister<'a> {
         /// Try to run the code on block
@@ -92,7 +92,7 @@ impl<'a> Context<'a> {
         return phi_register;
     }
 
-    pub fn seal_block(&mut self, label: &BlockLabel) {
+    pub fn seal_block(&mut self, label: &BlockLabel<'a>) {
         let block = self.graph.get_mut(&label).unwrap();
 
         let Some(vars) = block.unfinished_variables.take() else {
@@ -124,11 +124,11 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn get_loop(&self) -> &Loop {
+    pub fn get_loop(&self) -> &Loop<'a> {
         self.loops.last().unwrap()
     }
 
-    pub fn push_loop(&mut self, r#loop: Loop) {
+    pub fn push_loop(&mut self, r#loop: Loop<'a>) {
         self.loops.push(r#loop);
     }
 
@@ -137,21 +137,21 @@ impl<'a> Context<'a> {
     }
 }
 
-pub struct Loop {
-    pub next: BlockLabel,
-    pub end: BlockLabel,
+pub struct Loop<'a> {
+    pub next: BlockLabel<'a>,
+    pub end: BlockLabel<'a>,
 }
 
 pub struct BlockBuilder<'a> {
-    next_label: BlockLabel,
-    end_label: BlockLabel,
+    next_label: BlockLabel<'a>,
+    end_label: BlockLabel<'a>,
 
     block: ConBasicBlock<'a, ()>,
     is_closed: bool,
 }
 
 impl<'a> BlockBuilder<'a> {
-    pub fn new(start_label: BlockLabel, end_label: BlockLabel, ctx: &mut Context<'a>) -> Self {
+    pub fn new(start_label: BlockLabel<'a>, end_label: BlockLabel<'a>, ctx: &mut Context<'a>) -> Self {
         Self {
             end_label,
             next_label: ctx.counter.next(),
@@ -181,7 +181,7 @@ impl<'a> BlockBuilder<'a> {
         ctx.get_var_recursive(var, &label, Some(&mut self.block))
     }
 
-    pub fn next_label(&self) -> BlockLabel {
+    pub fn next_label(&self) -> BlockLabel<'a> {
         self.next_label
     }
 }

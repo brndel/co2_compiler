@@ -13,7 +13,7 @@ use crate::ssa::{
 /// # Construction Basic Block
 /// A Basic block with extra information needed for basic block construction
 pub struct ConBasicBlock<'a, End = BasicBlockEnd<'a>> {
-    pub label: BlockLabel,
+    pub label: BlockLabel<'a>,
     pub phis: Vec<PhiAssignment<'a>>,
     pub instructions: Vec<SsaInstruction<'a>>,
     pub assigned_phis: Vec<AssignPhi<'a>>,
@@ -50,7 +50,7 @@ impl<'a, End: Display> Display for ConBasicBlock<'a, End> {
 }
 
 impl<'a> IrGraphNode for ConBasicBlock<'a> {
-    type Id = BlockLabel;
+    type Id = BlockLabel<'a>;
 
     fn id(&self) -> Self::Id {
         self.label
@@ -114,7 +114,7 @@ impl<'a> Display for AssignPhi<'a> {
 }
 
 impl<'a, End> ConBasicBlock<'a, End> {
-    pub fn new(label: BlockLabel) -> Self
+    pub fn new(label: BlockLabel<'a>) -> Self
     where
         End: Default,
     {

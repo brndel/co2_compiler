@@ -25,7 +25,12 @@ pub enum SsaInstruction<'a> {
         op: UnaryOperator,
         value: VirtualRegister<'a>,
     },
+    FunctionArg {
+        index: usize,
+        target: VirtualRegister<'a>,
+    },
     FunctionCall {
+        target: Option<VirtualRegister<'a>>,
         name: &'a str,
         args: Vec<SsaValue<'a>>,
     }
@@ -59,7 +64,13 @@ impl<'a> Display for SsaInstruction<'a> {
             SsaInstruction::UnaryOp { target, op, value } => {
                 write!(f, "{} = {} {}", target, op, value)
             }
-            SsaInstruction::FunctionCall { name, args } => {
+            SsaInstruction::FunctionArg { index, target } => {
+                write!(f, "{} = arg({})", target, index)
+            }
+            SsaInstruction::FunctionCall { target, name, args } => {
+                if let Some(target) = target {
+                    write!(f, "{} = ", target)?;
+                }
                 write!(f, "{}(", name)?;
                 for (idx, arg) in args.iter().enumerate() {
                     if idx != 0 {
@@ -80,7 +91,8 @@ impl<'a> SsaInstruction<'a> {
             SsaInstruction::PhiMove { target, .. } => Some(target),
             SsaInstruction::BinaryOp { target, .. } => Some(target),
             SsaInstruction::UnaryOp { target, .. } => Some(target),
-            Self::FunctionCall { .. } => None,
+            SsaInstruction::FunctionArg { index, target, .. } => Some(target),
+            SsaInstruction::FunctionCall { target, .. } => target.as_ref(),
         }
     }
 }

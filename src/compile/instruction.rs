@@ -1,9 +1,9 @@
-use std::fmt::Display;
+use std::{cell::Ref, fmt::Display};
 
-use crate::{register_alloc::GraphColor, ssa::BlockLabel};
+use crate::{register_alloc::GraphColor, ssa::{BlockLabel, VirtualRegister}};
 
 #[derive(Debug)]
-pub enum Instruction {
+pub enum Instruction<'a> {
     Move {
         src: Value,
         dst: Register,
@@ -71,24 +71,30 @@ pub enum Instruction {
     // Control
     FunctionProlog {
         max_register: Register,
+        params: Vec<Register>,
     },
     Return {
         value: Value,
+        max_register: Register,
     },
     Label {
-        label: BlockLabel,
+        label: BlockLabel<'a>,
     },
     Jump {
-        dst: BlockLabel,
+        dst: BlockLabel<'a>,
     },
     JumpConditional {
         condition: Register,
-        on_true: BlockLabel,
-        on_false: BlockLabel,
+        on_true: BlockLabel<'a>,
+        on_false: BlockLabel<'a>,
     },
     CallFunction {
-        name: String,
+        label: BlockLabel<'a>,
+        dst: Option<Register>,
         params: Vec<Value>,
+    },
+    GlobalLabel {
+        label: BlockLabel<'a>,
     },
 }
 
@@ -121,7 +127,7 @@ impl Display for CompareOp {
     }
 }
 
-impl Display for Instruction {
+impl<'a> Display for Instruction<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Instruction::Move { src, dst } => match (&src, &dst) {
@@ -195,31 +201,8 @@ impl Display for Instruction {
             Instruction::Negate { reg } => write!(f, "neg {}", reg),
             Instruction::LogicNot { reg } => write!(f, "xor {}, {}", Value::Immediate(1), reg),
             Instruction::BitNot { reg } => write!(f, "notl {}", reg),
-            Instruction::Return { value } => {
-                writeln!(f, "mov {}, {}", value, SystemRegister::Eax)?;
-                writeln!(f, "leave")?;
-                write!(f, "ret")
-            }
-            Instruction::FunctionProlog { max_register } => {
-                let required_stack = match max_register {
-                    Register::Temp => 0,
-                    Register::Num(_) => 0,
-                    Register::Stack(stack_register) => stack_register.0,
-                };
 
-                // Align to nearest 16 byte value
-                let bytes = (required_stack + 15) & !15;
-
-                writeln!(f, "push %rbp")?;
-                writeln!(f, "mov %rsp, %rbp")?;
-                write!(f, "sub {}, %rsp", Value::Immediate(bytes as i32))
-            }
             Instruction::Label { label } => {
-                writeln!(f, "")?;
-                if label.id() == 0 {
-                    write!(f, "# ")?;
-                }
-
                 write!(f, "{}:", label)
             }
             Instruction::Jump { dst } => {
@@ -239,9 +222,99 @@ impl Display for Instruction {
                 writeln!(f, "jz {}", on_false)?;
                 write!(f, "jmp {}", on_true)
             }
-            Instruction::CallFunction { name, params } => {
-                write!(f, "call {}", name)
+            Instruction::FunctionProlog { max_register, params } => {
+                writeln!(f, "push %rbp")?;
+                writeln!(f, "mov %rsp, %rbp")?;
+
+                if max_register >= &Register::Num(NumRegister::R12) {
+                    writeln!(f, "push {}", NumRegister64::R12)?;
+                }
+
+                if max_register >= &Register::Num(NumRegister::R13) {
+                    writeln!(f, "push {}", NumRegister64::R13)?;
+                }
+
+                if max_register >= &Register::Num(NumRegister::R14) {
+                    writeln!(f, "push {}", NumRegister64::R14)?;
+                }
+
+                if max_register >= &Register::Num(NumRegister::R15) {
+                    writeln!(f, "push {}", NumRegister64::R15)?;
+                }
+
+                if let Register::Stack(StackRegister(registers)) = *max_register {
+                    // Align to nearest 16 byte value
+                    let bytes = (registers * 4 + 15) & !15;
+
+                    writeln!(f, "sub {}, %rsp", Value::Immediate(bytes as i32))?;
+                }
+
+                for (idx, target) in params.iter().enumerate() {
+                    let param_reg = FunctionArgRegister(idx);
+                    if let &Register::Stack(_) = target {
+                        writeln!(f, "movl {}, {}", param_reg, Register::Temp)?;
+                        writeln!(f, "movl {}, {}", Register::Temp, target)?;
+                    } else {
+                        writeln!(f, "movl {}, {}", param_reg, target)?;
+                    }
+                }
+
+                Ok(())
             }
+            Instruction::Return {
+                value,
+                max_register,
+            } => {
+                if max_register >= &Register::Num(NumRegister::R15) {
+                    writeln!(f, "pop {}", NumRegister64::R15)?;
+                }
+
+                if max_register >= &Register::Num(NumRegister::R14) {
+                    writeln!(f, "pop {}", NumRegister64::R14)?;
+                }
+
+                if max_register >= &Register::Num(NumRegister::R13) {
+                    writeln!(f, "pop {}", NumRegister64::R13)?;
+                }
+
+                if max_register >= &Register::Num(NumRegister::R12) {
+                    writeln!(f, "pop {}", NumRegister64::R12)?;
+                }
+
+                writeln!(f, "mov {}, {}", value, SystemRegister::Eax)?;
+                writeln!(f, "leave")?;
+                writeln!(f, "ret")
+            }
+            Instruction::CallFunction { dst, label, params } => {
+                writeln!(f, "push {}", NumRegister64::Temp)?;
+                writeln!(f, "push {}", NumRegister64::R9)?;
+                writeln!(f, "push {}", NumRegister64::R10)?;
+                writeln!(f, "push {}", NumRegister64::R11)?;
+                
+                let mut aligned_param_count = params.len();
+                if aligned_param_count % 2 == 1 {
+                    aligned_param_count += 1;
+                    writeln!(f, "sub {}, %rsp", Value::Immediate(8))?;
+                }
+                for param in params.iter().rev() {
+                    writeln!(f, "push {}", param)?;
+                }
+                writeln!(f, "call {}", label)?;
+                if aligned_param_count != 0 {
+                    writeln!(f, "add {}, %rsp", Value::Immediate(aligned_param_count as i32 * 8))?;
+                }
+
+                writeln!(f, "pop {}", NumRegister64::R11)?;
+                writeln!(f, "pop {}", NumRegister64::R10)?;
+                writeln!(f, "pop {}", NumRegister64::R9)?;
+                writeln!(f, "pop {}", NumRegister64::Temp)?;
+                if let Some(dst) = dst {
+                    write!(f, "mov {}, {}", SystemRegister::Eax, dst)?
+                }
+
+                Ok(())
+            }
+            Instruction::GlobalLabel { label } => write!(f, ".global {}", label),
         }
     }
 }
@@ -290,7 +363,21 @@ pub enum NumRegister {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct StackRegister(pub u32);
+pub enum NumRegister64 {
+    Temp,
+    R9,
+    R10,
+    R11,
+    R12,
+    R13,
+    R14,
+    R15,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct StackRegister(pub usize);
+
+struct FunctionArgRegister(pub usize);
 
 impl<T: Into<Register>> From<T> for Value {
     fn from(value: T) -> Self {
@@ -346,9 +433,31 @@ impl Display for NumRegister {
     }
 }
 
+impl Display for NumRegister64 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NumRegister64::Temp => write!(f, "%r8"),
+            NumRegister64::R9 => write!(f, "%r9"),
+            NumRegister64::R10 => write!(f, "%r10"),
+            NumRegister64::R11 => write!(f, "%r11"),
+            NumRegister64::R12 => write!(f, "%r12"),
+            NumRegister64::R13 => write!(f, "%r13"),
+            NumRegister64::R14 => write!(f, "%r14"),
+            NumRegister64::R15 => write!(f, "%r15"),
+        }
+    }
+}
+
 impl Display for StackRegister {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "-{}(%rbp)", self.0 * 4)
+    }
+}
+
+impl Display for FunctionArgRegister {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let offset =  (self.0 + 1) * 8 + 8;
+        write!(f, "{}(%rbp)", offset)
     }
 }
 

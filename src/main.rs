@@ -8,7 +8,7 @@ mod register_alloc;
 mod semantic;
 mod ssa;
 
-use std::{fs::read_to_string, mem::swap, ops::Range, process::exit};
+use std::{collections::BTreeMap, fs::read_to_string, mem::swap, ops::Range, process::exit};
 
 use args::get_args;
 use ariadne::{Color, Label, Report, ReportKind, sources};
@@ -55,29 +55,36 @@ fn main() {
 
     let func_graphs =  analyzed.program.functions.into_iter().map(|func | FunctionIrGraph::new(func)).collect::<Vec<_>>();
 
-    #[cfg(debug_assertions)]
+    let func_labels = BTreeMap::from_iter(func_graphs.iter().map(|func| (func.name, func.start_label)));
+
+    let mut assembly = Vec::new();
+
     for func in &func_graphs {
+        #[cfg(debug_assertions)]
         for block in func.graph.iter() {
             println!("{}", block);
         }
+
+        let ir_graph = &func.graph;
+
+        let live_container = LivelinessContainer::new(&ir_graph);
+
+        // #[cfg(debug_assertions)]
+        // println!("{}", live_container);
+
+        let live_graph = LivelinessGraph::new(&ir_graph, &live_container);
+
+        // #[cfg(debug_assertions)]
+        // println!("{}", live_graph);
+
+        let registers = live_graph.greedy_coloring::<Register>();
+
+
+        let mut asm = generate_asm(func, &registers, live_graph.visited_blocks(), &func_labels);
+
+        assembly.append(&mut asm);
     }
 
-    let main_fn = func_graphs.into_iter().filter(|func| func.name == "main").next().unwrap();
-    let ir_graph = main_fn.graph;
-
-    let live_container = LivelinessContainer::new(&ir_graph);
-
-    // #[cfg(debug_assertions)]
-    // println!("{}", live_container);
-
-    let live_graph = LivelinessGraph::new(&ir_graph, &live_container);
-
-    // #[cfg(debug_assertions)]
-    // println!("{}", live_graph);
-
-    let registers = live_graph.greedy_coloring::<Register>();
-
-    let assembly = generate_asm(ir_graph, &registers, live_graph.visited_blocks());
 
     #[cfg(debug_assertions)]
     for instr in &assembly {
