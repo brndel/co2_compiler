@@ -1,6 +1,10 @@
+.text
 .global main
 .global _main
-.text
+.extern getchar
+.extern putchar
+.extern fflush
+.extern stdout
 
 
 main:

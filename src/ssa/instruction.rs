@@ -4,7 +4,7 @@ use crate::lexer::{BinaryOperator, UnaryOperator};
 
 use super::register::VirtualRegister;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum SsaInstruction<'a> {
     Move {
         target: VirtualRegister<'a>,
@@ -25,6 +25,10 @@ pub enum SsaInstruction<'a> {
         op: UnaryOperator,
         value: VirtualRegister<'a>,
     },
+    FunctionCall {
+        name: &'a str,
+        args: Vec<SsaValue<'a>>,
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -55,17 +59,28 @@ impl<'a> Display for SsaInstruction<'a> {
             SsaInstruction::UnaryOp { target, op, value } => {
                 write!(f, "{} = {} {}", target, op, value)
             }
+            SsaInstruction::FunctionCall { name, args } => {
+                write!(f, "{}(", name)?;
+                for (idx, arg) in args.iter().enumerate() {
+                    if idx != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
 
 impl<'a> SsaInstruction<'a> {
-    pub fn target(&self) -> &VirtualRegister<'a> {
+    pub fn target(&self) -> Option<&VirtualRegister<'a>> {
         match self {
-            SsaInstruction::Move { target, .. } => target,
-            SsaInstruction::PhiMove { target, .. } => target,
-            SsaInstruction::BinaryOp { target, .. } => target,
-            SsaInstruction::UnaryOp { target, .. } => target,
+            SsaInstruction::Move { target, .. } => Some(target),
+            SsaInstruction::PhiMove { target, .. } => Some(target),
+            SsaInstruction::BinaryOp { target, .. } => Some(target),
+            SsaInstruction::UnaryOp { target, .. } => Some(target),
+            Self::FunctionCall { .. } => None,
         }
     }
 }

@@ -86,6 +86,11 @@ impl<'a> LivelinessContainer<'a> {
                     self.remove_live(line, target);
                     self.add_live(line, &SsaValue::Register(*value));
                 }
+                SsaInstruction::FunctionCall { name: _, args } => {
+                    for arg in args {
+                        self.add_live(line, arg);
+                    }
+                }
             }
         }
 
@@ -164,7 +169,16 @@ impl<'a> Display for LivelinessContainer<'a> {
                 writeln!(f, "{}:", line.block)?;
             }
 
-            writeln!(f, "{:2}: {}", line.line, live_set.iter().map(|reg| format!("{}", reg)).collect::<Vec<_>>().join(", ") )?;
+            writeln!(
+                f,
+                "{:2}: {}",
+                line.line,
+                live_set
+                    .iter()
+                    .map(|reg| format!("{}", reg))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )?;
         }
 
         Ok(())

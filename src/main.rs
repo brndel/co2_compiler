@@ -19,7 +19,7 @@ use parser::{ParseNum, program_parser};
 use program::Program;
 use register_alloc::{LivelinessContainer, LivelinessGraph};
 use semantic::Analyzed;
-use ssa::build_ir_graph;
+use ssa::FunctionIrGraph;
 
 fn main() {
     let args = get_args();
@@ -53,27 +53,37 @@ fn main() {
     #[cfg(debug_assertions)]
     println!("Semantic analyzer passed");
 
-    let ir_graph = build_ir_graph(analyzed.program);
+    let func_graphs =  analyzed.program.functions.into_iter().map(|func | FunctionIrGraph::new(func)).collect::<Vec<_>>();
 
     #[cfg(debug_assertions)]
-    for block in ir_graph.iter() {
-        println!("{}", block);
+    for func in &func_graphs {
+        for block in func.graph.iter() {
+            println!("{}", block);
+        }
     }
+
+    let main_fn = func_graphs.into_iter().filter(|func| func.name == "main").next().unwrap();
+    let ir_graph = main_fn.graph;
 
     let live_container = LivelinessContainer::new(&ir_graph);
 
-    #[cfg(debug_assertions)]
-    println!("{}", live_container);
+    // #[cfg(debug_assertions)]
+    // println!("{}", live_container);
 
     let live_graph = LivelinessGraph::new(&ir_graph, &live_container);
 
-    #[cfg(debug_assertions)]
-    println!("{}", live_graph);
+    // #[cfg(debug_assertions)]
+    // println!("{}", live_graph);
 
     let registers = live_graph.greedy_coloring::<Register>();
 
     let assembly = generate_asm(ir_graph, &registers, live_graph.visited_blocks());
 
+    #[cfg(debug_assertions)]
+    for instr in &assembly {
+        println!("{:?}", instr);
+    }
+    
     compile_code(args.output_file, assembly, true);
 
     exit(0);

@@ -58,7 +58,9 @@ pub fn build_ir_statement<'a>(
 
             builder.set_variable(ident.0, target);
         }
-        Statement::FunctionCall(fn_call) => todo!(),
+        Statement::FunctionCall(fn_call) => {
+            todo!()
+        },
         Statement::If {
             condition,
             then,

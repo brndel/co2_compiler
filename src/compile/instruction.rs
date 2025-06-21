@@ -1,7 +1,8 @@
 use std::fmt::Display;
 
-use crate::{parser::Block, register_alloc::GraphColor, ssa::BlockLabel};
+use crate::{register_alloc::GraphColor, ssa::BlockLabel};
 
+#[derive(Debug)]
 pub enum Instruction {
     Move {
         src: Value,
@@ -68,8 +69,8 @@ pub enum Instruction {
     },
 
     // Control
-    AllocateStack {
-        bytes: u32,
+    FunctionProlog {
+        max_register: Register,
     },
     Return {
         value: Value,
@@ -85,8 +86,13 @@ pub enum Instruction {
         on_true: BlockLabel,
         on_false: BlockLabel,
     },
+    CallFunction {
+        name: String,
+        params: Vec<Value>,
+    },
 }
 
+#[derive(Debug)]
 pub enum CompareOp {
     Less,
     LessEq,
@@ -194,10 +200,19 @@ impl Display for Instruction {
                 writeln!(f, "leave")?;
                 write!(f, "ret")
             }
-            Instruction::AllocateStack { bytes } => {
+            Instruction::FunctionProlog { max_register } => {
+                let required_stack = match max_register {
+                    Register::Temp => 0,
+                    Register::Num(_) => 0,
+                    Register::Stack(stack_register) => stack_register.0,
+                };
+
+                // Align to nearest 16 byte value
+                let bytes = (required_stack + 15) & !15;
+
                 writeln!(f, "push %rbp")?;
                 writeln!(f, "mov %rsp, %rbp")?;
-                write!(f, "sub {}, %rsp", Value::Immediate(*bytes as i32))
+                write!(f, "sub {}, %rsp", Value::Immediate(bytes as i32))
             }
             Instruction::Label { label } => {
                 writeln!(f, "")?;
@@ -224,10 +239,14 @@ impl Display for Instruction {
                 writeln!(f, "jz {}", on_false)?;
                 write!(f, "jmp {}", on_true)
             }
+            Instruction::CallFunction { name, params } => {
+                write!(f, "call {}", name)
+            }
         }
     }
 }
 
+#[derive(Debug)]
 pub enum Value {
     Register(Register),
     Immediate(i32),
@@ -242,8 +261,9 @@ impl Display for Value {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum Register {
+    #[default]
     Temp,
     Num(NumRegister),
     Stack(StackRegister),

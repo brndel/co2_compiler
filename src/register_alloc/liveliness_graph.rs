@@ -89,10 +89,11 @@ impl<'a> LivelinessGraph<'a> {
             };
 
             if let Some(instr) = block.instructions.get(line.line) {
-                let target = instr.target();
                 let live_set = container.get_live_set(&next_line);
-
-                self.insert_live_set(target, live_set);
+                
+                if let Some(target) = instr.target() {
+                    self.insert_live_set(target, live_set);
+                }
             }
             self.insert_line(&next_line, ir_graph, container);
         }

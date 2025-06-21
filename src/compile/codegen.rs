@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     Register,
-    instruction::{CompareOp, Instruction, StackRegister, Value},
+    instruction::{CompareOp, Instruction, Value},
 };
 
 pub fn generate_asm(
@@ -19,18 +19,9 @@ pub fn generate_asm(
 ) -> Vec<Instruction> {
     let mut instructions = Vec::new();
 
-    let max_stack_register = registers
-        .values()
-        .filter_map(|reg| match reg {
-            Register::Stack(StackRegister(pos)) => Some(*pos),
-            _ => None,
-        })
-        .max()
-        .unwrap_or_default();
+    let max_register = registers.values().max().cloned().unwrap_or_default();
 
-    instructions.push(Instruction::AllocateStack {
-        bytes: max_stack_register * 4,
-    });
+    instructions.push(Instruction::FunctionProlog { max_register });
 
     for block in ir_graph {
         if !visited_blocks.contains(&block.label) {
@@ -190,13 +181,14 @@ pub fn generate_asm(
                         UnaryOperator::BitNot => instructions.push(Instruction::BitNot { reg }),
                     }
                 }
+                SsaInstruction::FunctionCall { name, args } => todo!(),
             }
         }
 
         match block.end {
             BasicBlockEnd::Goto { label } => {
                 instructions.push(Instruction::Jump { dst: label });
-            },
+            }
             BasicBlockEnd::Return { value } => {
                 instructions.push(Instruction::Return {
                     value: transform_value(value, registers),
@@ -210,12 +202,19 @@ pub fn generate_asm(
                 let condition = match transform_value(condition, registers) {
                     Value::Register(register) => register,
                     value @ Value::Immediate(_) => {
-                        instructions.push(Instruction::Move { src: value, dst: Register::Temp });
+                        instructions.push(Instruction::Move {
+                            src: value,
+                            dst: Register::Temp,
+                        });
                         Register::Temp
-                    },
+                    }
                 };
-                instructions.push(Instruction::JumpConditional { condition, on_true, on_false });
-            },
+                instructions.push(Instruction::JumpConditional {
+                    condition,
+                    on_true,
+                    on_false,
+                });
+            }
         };
     }
 
