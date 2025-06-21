@@ -8,6 +8,11 @@
 
 main:
 call main_0
+push %rax
+push stdout
+call fflush
+sub $8, %rsp
+pop %rax
 # move the return value into the first argument for the syscall
 movq %rax, %rdi
 # move the exit syscall number into rax
