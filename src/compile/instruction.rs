@@ -348,7 +348,7 @@ impl<'a> Display for Instruction<'a> {
                                 writeln!(f, "call getchar")?;
                             },
                             BuiltinFuntion::Flush => {
-                                writeln!(f, "push stdout")?;
+                                writeln!(f, "mov stdout(%rip), %rdi")?;
                                 writeln!(f, "call fflush")?;
                                 writeln!(f, "add {}, %rsp", Value::Immediate(8))?;
                             },

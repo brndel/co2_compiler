@@ -9,7 +9,7 @@
 main:
 call main_0
 push %rax
-push stdout
+mov stdout(%rip), %rdi
 call fflush
 sub $8, %rsp
 pop %rax
