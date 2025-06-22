@@ -9,7 +9,7 @@ use builder::{BlockBuilder, Context};
 
 use crate::{
     parser::Statement,
-    program::{Function, Program},
+    program::Function,
     ssa::BlockLabel,
 };
 
@@ -24,9 +24,9 @@ pub struct FunctionIrGraph<'a> {
 
 impl<'a> FunctionIrGraph<'a> {
     pub fn new(func: Function<'a>) -> Self {
-        let mut ctx = Context::new();
-
         let ident = func.ident.0;
+        let mut ctx = Context::new(ident);
+
 
         let start_label = ctx.counter.next_block_label(Some("start"));
         let end_label = ctx.counter.next_block_label(Some("end"));

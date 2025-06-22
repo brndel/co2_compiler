@@ -1,12 +1,13 @@
-use crate::ssa::BlockLabel;
-
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Counter<'a> {
     func: &'a str,
     count: usize,
 }
 
 impl<'a> Counter<'a> {
+    pub fn new(func: &'a str) -> Self {
+        Counter { func, count: 0 }
+    }
     pub fn next<T: From<usize>>(&mut self) -> T {
         let reg = self.count;
         self.count += 1;

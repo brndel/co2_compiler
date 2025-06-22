@@ -9,7 +9,6 @@ use crate::ssa::{
 
 use super::{AssignPhi, ConBasicBlock, PhiAssignment};
 
-#[derive(Default)]
 pub struct Context<'a> {
     pub counter: Counter<'a>,
     loops: Vec<Loop<'a>>,
@@ -17,8 +16,12 @@ pub struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(func: &'a str) -> Self {
+        Self {
+            counter: Counter::new(func),
+            loops: Vec::default(),
+            graph: IrGraph::default(),
+        }
     }
 
     pub fn finish(self) -> IrGraph<BasicBlock<'a>> {
