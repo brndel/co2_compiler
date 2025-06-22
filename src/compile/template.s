@@ -7,7 +7,7 @@
 
 
 main:
-call main_0
+call main_start_0
 push %rax
 mov stdout(%rip), %rdi
 call fflush
