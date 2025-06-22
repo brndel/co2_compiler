@@ -222,8 +222,8 @@ impl<'a> Display for Instruction<'a> {
                     write!(f, "movzbl %al, {}", target)
                 }
             }
-            Instruction::Negate { reg } => write!(f, "neg {}", reg),
-            Instruction::LogicNot { reg } => write!(f, "xor {}, {}", Value::Immediate(1), reg),
+            Instruction::Negate { reg } => write!(f, "negl {}", reg),
+            Instruction::LogicNot { reg } => write!(f, "xorl {}, {}", Value::Immediate(1), reg),
             Instruction::BitNot { reg } => write!(f, "notl {}", reg),
 
             Instruction::Label { label } => {
