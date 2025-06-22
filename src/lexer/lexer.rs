@@ -5,7 +5,7 @@ use chumsky::{
     IterParser, Parser,
     error::Rich,
     extra,
-    prelude::{any, just, one_of, recursive},
+    prelude::{any, end, just, one_of, recursive},
     select,
     span::SimpleSpan,
     text::{digits, int, newline},
@@ -95,10 +95,11 @@ pub fn lexer<'src>()
 
     token
         .map_with(|token, extra| (token, extra.span()))
-        .padded_by(comment.repeated())
+        .padded_by(comment.clone().repeated())
         .padded_by(whitespace)
         .repeated()
         .collect()
+        .padded_by(comment.repeated())
 }
 
 mod chumsky_fix {
