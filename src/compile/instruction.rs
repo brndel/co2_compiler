@@ -293,7 +293,7 @@ impl<'a> Display for Instruction<'a> {
                 max_register,
             } => {
                 writeln!(f, "mov {}, {}", value, SystemRegister::Eax)?;
-                
+
                 if max_register >= &Register::Num(NumRegister::R15) {
                     writeln!(f, "pop {}", NumRegister64::R15)?;
                 }
@@ -342,7 +342,7 @@ impl<'a> Display for Instruction<'a> {
                         match builtin_funtion {
                             BuiltinFuntion::Print => {
                                 let param = params[0];
-                                writeln!(f, "mov {}, %rdi", param)?;
+                                writeln!(f, "movl {}, %edi", param)?;
                                 writeln!(f, "call putchar")?;
                             },
                             BuiltinFuntion::Read => {
