@@ -33,7 +33,20 @@ pub enum NumRegister {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StackRegister(pub usize);
 
-pub struct FunctionArgRegister(pub usize);
+pub struct FunctionArgRegister {
+    idx: usize,
+    get: bool,
+}
+
+impl FunctionArgRegister {
+    pub fn set(idx: usize) -> Self {
+        Self { idx, get: false }
+    }
+
+    pub fn get(idx: usize) -> Self {
+        Self { idx, get: true }
+    }
+}
 
 impl From<NumRegister> for Register {
     fn from(value: NumRegister) -> Self {
@@ -91,8 +104,13 @@ impl Display for StackRegister {
 
 impl Display for FunctionArgRegister {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let offset = (self.0 + 1) * 8 + 8;
-        write!(f, "{}(%rbp)", offset)
+        if self.get {
+            let offset = self.idx * 4 + 16;
+            write!(f, "{}(%rbp)", offset)
+        } else {
+            let offset = self.idx * 4;
+            write!(f, "{}(%rsp)", offset)    
+        }
     }
 }
 

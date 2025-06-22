@@ -277,7 +277,7 @@ impl<'a> Display for Instruction<'a> {
                 }
 
                 for (idx, target) in params.iter().enumerate() {
-                    let param_reg = FunctionArgRegister(idx);
+                    let param_reg = FunctionArgRegister::get(idx);
                     if let &Register::Stack(_) = target {
                         writeln!(f, "movl {}, {}", param_reg, Register::Temp)?;
                         writeln!(f, "movl {}, {}", Register::Temp, target)?;
@@ -293,6 +293,14 @@ impl<'a> Display for Instruction<'a> {
                 max_register,
             } => {
                 writeln!(f, "mov {}, {}", value, SystemRegister::Eax)?;
+
+                // Free stack
+                if let Register::Stack(StackRegister(registers)) = *max_register {
+                    // Align to nearest 16 byte value
+                    let bytes = (registers * 4 + 15) & !15;
+
+                    writeln!(f, "add {}, %rsp", Value::Immediate(bytes as i32))?;
+                }
 
                 if max_register >= &Register::Num(NumRegister::R15) {
                     writeln!(f, "pop {}", NumRegister64::R15)?;
@@ -321,38 +329,38 @@ impl<'a> Display for Instruction<'a> {
 
                 match func {
                     FunctionPointer::User { label } => {
-                        let mut aligned_param_count = params.len();
-                        if aligned_param_count % 2 == 1 {
-                            aligned_param_count += 1;
-                            writeln!(f, "sub {}, %rsp", Value::Immediate(8))?;
+                        let param_bytes = (params.len() * 4 + 15) & !15;
+                        writeln!(f, "sub {}, %rsp", Value::Immediate(param_bytes as i32))?;
+
+                        for (idx, param) in params.iter().enumerate() {
+                            let target = FunctionArgRegister::set(idx);
+                            if let &Value::Register(Register::Stack(_)) = param {
+                                writeln!(f, "movl {}, {}", param, Register::Temp)?;
+                                writeln!(f, "movl {}, {}", Register::Temp, target)?;
+                            } else {
+                                writeln!(f, "movl {}, {}", param, target)?;
+                            }
                         }
-                        for param in params.iter().rev() {
-                            writeln!(f, "push {}", (*param).to_64())?;
-                        }
+
                         writeln!(f, "call {}", label)?;
-                        if aligned_param_count != 0 {
-                            writeln!(
-                                f,
-                                "add {}, %rsp",
-                                Value::Immediate(aligned_param_count as i32 * 8)
-                            )?;
-                        }
+
+                        writeln!(f, "add {}, %rsp", Value::Immediate(param_bytes as i32))?;
                     }
-                    FunctionPointer::Builtin(builtin_funtion) => {
-                        match builtin_funtion {
-                            BuiltinFuntion::Print => {
-                                let param = params[0];
-                                writeln!(f, "movl {}, %edi", param)?;
-                                writeln!(f, "call putchar")?;
-                            },
-                            BuiltinFuntion::Read => {
-                                writeln!(f, "call getchar")?;
-                            },
-                            BuiltinFuntion::Flush => {
-                                writeln!(f, "mov stdout(%rip), %rdi")?;
-                                writeln!(f, "call fflush")?;
-                                writeln!(f, "add {}, %rsp", Value::Immediate(8))?;
-                            },
+                    FunctionPointer::Builtin(builtin_funtion) => match builtin_funtion {
+                        BuiltinFuntion::Print => {
+                            let param = params[0];
+                            writeln!(f, "movl {}, %edi", param)?;
+                            writeln!(f, "call putchar")?;
+                            writeln!(f, "movl {}, {}", Value::Immediate(0), SystemRegister::Eax)?;
+                        }
+                        BuiltinFuntion::Read => {
+                            writeln!(f, "call getchar")?;
+                        }
+                        BuiltinFuntion::Flush => {
+                            writeln!(f, "mov stdout(%rip), %rdi")?;
+                            writeln!(f, "call fflush")?;
+                            writeln!(f, "add {}, %rsp", Value::Immediate(8))?;
+                            writeln!(f, "movl {}, {}", Value::Immediate(0), SystemRegister::Eax)?;
                         }
                     },
                 }
