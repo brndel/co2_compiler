@@ -98,7 +98,8 @@ impl Display for NumRegister {
 
 impl Display for StackRegister {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "-{}(%rbp)", self.0 * 4)
+        // 32 bytes for saved stack registers
+        write!(f, "-{}(%rbp)", self.0 * 4 + 32)
     }
 }
 

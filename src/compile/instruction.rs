@@ -259,13 +259,19 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(f, "push %rbp")?;
                 writeln!(f, "mov %rsp, %rbp")?;
                 
+
+                writeln!(f, "push {}", NumRegister64::R12)?;
+                writeln!(f, "push {}", NumRegister64::R13)?;
+                writeln!(f, "push {}", NumRegister64::R14)?;
+                writeln!(f, "push {}", NumRegister64::R15)?;
+
                 if let Register::Stack(StackRegister(registers)) = *max_register {
                     // Align to nearest 16 byte value
                     let bytes = (registers * 4 + 15) & !15;
                     
                     writeln!(f, "sub {}, %rsp", Value::Immediate(bytes as i32))?;
                 }
-                
+
                 for (idx, target) in params.iter().enumerate() {
                     let param_reg = FunctionArgRegister::get(idx);
                     if let &Register::Stack(_) = target {
@@ -276,10 +282,6 @@ impl<'a> Display for Instruction<'a> {
                     }
                 }
                 
-                writeln!(f, "push {}", NumRegister64::R12)?;
-                writeln!(f, "push {}", NumRegister64::R13)?;
-                writeln!(f, "push {}", NumRegister64::R14)?;
-                writeln!(f, "push {}", NumRegister64::R15)?;
                 
                 Ok(())
             }
@@ -287,13 +289,6 @@ impl<'a> Display for Instruction<'a> {
                 value,
                 max_register,
             } => {
-                writeln!(f, "mov {}, {}", value, SystemRegister::Eax)?;
-
-                writeln!(f, "pop {}", NumRegister64::R15)?;
-                writeln!(f, "pop {}", NumRegister64::R14)?;
-                writeln!(f, "pop {}", NumRegister64::R13)?;
-                writeln!(f, "pop {}", NumRegister64::R12)?;
-
                 // Free stack
                 if let Register::Stack(StackRegister(registers)) = *max_register {
                     // Align to nearest 16 byte value
@@ -302,6 +297,12 @@ impl<'a> Display for Instruction<'a> {
                     writeln!(f, "add {}, %rsp", Value::Immediate(bytes as i32))?;
                 }
 
+                writeln!(f, "mov {}, {}", value, SystemRegister::Eax)?;
+
+                writeln!(f, "pop {}", NumRegister64::R15)?;
+                writeln!(f, "pop {}", NumRegister64::R14)?;
+                writeln!(f, "pop {}", NumRegister64::R13)?;
+                writeln!(f, "pop {}", NumRegister64::R12)?;
 
                 writeln!(f, "leave")?;
                 writeln!(f, "ret")
