@@ -173,6 +173,7 @@ fn validate_statement<'src, Num>(
 
             let mut inner = loop_namespace.new_child();
             validate_statement(errors, &then, &mut inner, functions, current_function);
+            loop_namespace.assign_variable_set(inner.local_assigned_variables().clone());
 
             if let Some(step) = step {
                 validate_statement(errors, step, &mut loop_namespace, functions, current_function);
