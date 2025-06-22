@@ -154,15 +154,21 @@ impl Display for CompareOp {
 impl<'a> Display for Instruction<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Instruction::Move { src, dst } => match (&src, &dst) {
-                (Value::Register(Register::Stack(_)), Register::Stack(_)) => {
-                    writeln!(f, "movl {}, {}", src, Register::Temp)?;
-                    write!(f, "movl {}, {}", Register::Temp, dst)
+            Instruction::Move { src, dst } => {
+                if src == dst {
+                    Ok(())
+                } else {
+                    match (&src, &dst) {
+                        (Value::Register(Register::Stack(_)), Register::Stack(_)) => {
+                            writeln!(f, "movl {}, {}", src, Register::Temp)?;
+                            write!(f, "movl {}, {}", Register::Temp, dst)
+                        }
+                        _ => {
+                            write!(f, "movl {}, {}", src, dst)
+                        }
+                    }
                 }
-                _ => {
-                    write!(f, "movl {}, {}", src, dst)
-                }
-            },
+            }
             Instruction::Add { reg, value } => write!(f, "add {}, {}", value, reg),
             Instruction::Sub { reg, value } => write!(f, "sub {}, {}", value, reg),
             Instruction::Mul { reg, value } => write!(f, "imul {}, {}", value, reg),
@@ -252,30 +258,14 @@ impl<'a> Display for Instruction<'a> {
             } => {
                 writeln!(f, "push %rbp")?;
                 writeln!(f, "mov %rsp, %rbp")?;
-
-                if max_register >= &Register::Num(NumRegister::R12) {
-                    writeln!(f, "push {}", NumRegister64::R12)?;
-                }
-
-                if max_register >= &Register::Num(NumRegister::R13) {
-                    writeln!(f, "push {}", NumRegister64::R13)?;
-                }
-
-                if max_register >= &Register::Num(NumRegister::R14) {
-                    writeln!(f, "push {}", NumRegister64::R14)?;
-                }
-
-                if max_register >= &Register::Num(NumRegister::R15) {
-                    writeln!(f, "push {}", NumRegister64::R15)?;
-                }
-
+                
                 if let Register::Stack(StackRegister(registers)) = *max_register {
                     // Align to nearest 16 byte value
                     let bytes = (registers * 4 + 15) & !15;
-
+                    
                     writeln!(f, "sub {}, %rsp", Value::Immediate(bytes as i32))?;
                 }
-
+                
                 for (idx, target) in params.iter().enumerate() {
                     let param_reg = FunctionArgRegister::get(idx);
                     if let &Register::Stack(_) = target {
@@ -285,7 +275,12 @@ impl<'a> Display for Instruction<'a> {
                         writeln!(f, "movl {}, {}", param_reg, target)?;
                     }
                 }
-
+                
+                writeln!(f, "push {}", NumRegister64::R12)?;
+                writeln!(f, "push {}", NumRegister64::R13)?;
+                writeln!(f, "push {}", NumRegister64::R14)?;
+                writeln!(f, "push {}", NumRegister64::R15)?;
+                
                 Ok(())
             }
             Instruction::Return {
@@ -293,6 +288,11 @@ impl<'a> Display for Instruction<'a> {
                 max_register,
             } => {
                 writeln!(f, "mov {}, {}", value, SystemRegister::Eax)?;
+
+                writeln!(f, "pop {}", NumRegister64::R15)?;
+                writeln!(f, "pop {}", NumRegister64::R14)?;
+                writeln!(f, "pop {}", NumRegister64::R13)?;
+                writeln!(f, "pop {}", NumRegister64::R12)?;
 
                 // Free stack
                 if let Register::Stack(StackRegister(registers)) = *max_register {
@@ -302,21 +302,6 @@ impl<'a> Display for Instruction<'a> {
                     writeln!(f, "add {}, %rsp", Value::Immediate(bytes as i32))?;
                 }
 
-                if max_register >= &Register::Num(NumRegister::R15) {
-                    writeln!(f, "pop {}", NumRegister64::R15)?;
-                }
-
-                if max_register >= &Register::Num(NumRegister::R14) {
-                    writeln!(f, "pop {}", NumRegister64::R14)?;
-                }
-
-                if max_register >= &Register::Num(NumRegister::R13) {
-                    writeln!(f, "pop {}", NumRegister64::R13)?;
-                }
-
-                if max_register >= &Register::Num(NumRegister::R12) {
-                    writeln!(f, "pop {}", NumRegister64::R12)?;
-                }
 
                 writeln!(f, "leave")?;
                 writeln!(f, "ret")
