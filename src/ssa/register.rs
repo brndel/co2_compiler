@@ -52,8 +52,8 @@ impl<'a> From<usize> for VirtualRegister<'a> {
     }
 }
 
-impl Counter {
-    pub fn next_register<'a>(&mut self, ident: &'a str) -> VirtualRegister<'a> {
+impl<'a> Counter<'a> {
+    pub fn next_register(&mut self, ident: &'a str) -> VirtualRegister<'a> {
         let mut next: VirtualRegister<'a> = self.next();
 
         next.ident = Some(ident);

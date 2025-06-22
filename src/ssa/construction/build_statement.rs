@@ -69,9 +69,9 @@ pub fn build_ir_statement<'a>(
             let condition = build_ir_expr(condition, ctx, builder);
 
             let next_label = builder.next_label();
-            let then_label = ctx.counter.next_block_label("then");
+            let then_label = ctx.counter.next_block_label(Some("then"));
             let else_label = if r#else.is_some() {
-                ctx.counter.next_block_label("else")
+                ctx.counter.next_block_label(Some("else"))
             } else {
                 next_label
             };
@@ -97,8 +97,8 @@ pub fn build_ir_statement<'a>(
         }
         Statement::While { condition, body } => {
             let next_label = builder.next_label();
-            let condition_label = ctx.counter.next_block_label("while_condition");
-            let body_label = ctx.counter.next_block_label("while_body");
+            let condition_label = ctx.counter.next_block_label(Some("while_condition"));
+            let body_label = ctx.counter.next_block_label(Some("while_body"));
 
             builder.end(
                 BasicBlockEnd::Goto {
@@ -140,17 +140,17 @@ pub fn build_ir_statement<'a>(
         } => {
             let next_label = builder.next_label();
 
-            let condition_label = ctx.counter.next_block_label("for_condition");
-            let body_label = ctx.counter.next_block_label("for_body");
+            let condition_label = ctx.counter.next_block_label(Some("for_condition"));
+            let body_label = ctx.counter.next_block_label(Some("for_body"));
 
             let init_label = if init.is_some() {
-                ctx.counter.next_block_label("for_init")
+                ctx.counter.next_block_label(Some("for_init"))
             } else {
                 condition_label
             };
 
             let step_label = if step.is_some() {
-                ctx.counter.next_block_label("for_step")
+                ctx.counter.next_block_label(Some("for_step"))
             } else {
                 condition_label
             };

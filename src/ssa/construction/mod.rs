@@ -28,8 +28,8 @@ impl<'a> FunctionIrGraph<'a> {
 
         let ident = func.ident.0;
 
-        let start_label = ctx.counter.next_block_label(ident);
-        let end_label = ctx.counter.next_block_label("end");
+        let start_label = ctx.counter.next_block_label(Some("start"));
+        let end_label = ctx.counter.next_block_label(Some("end"));
 
         let mut scope = BlockBuilder::new(start_label, end_label, &mut ctx);
 

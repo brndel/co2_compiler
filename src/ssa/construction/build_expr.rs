@@ -105,9 +105,9 @@ fn build_ir_ternary<'a>(
     false_label: &'static str,
 ) -> SsaValue<'a> {
     let next_label = builder.next_label();
-    let condition_label = ctx.counter.next_block_label("condition");
-    let on_true = ctx.counter.next_block_label(true_label);
-    let on_false = ctx.counter.next_block_label(false_label);
+    let condition_label = ctx.counter.next_block_label(Some("condition"));
+    let on_true = ctx.counter.next_block_label(Some(true_label));
+    let on_false = ctx.counter.next_block_label(Some(false_label));
     let target = ctx.counter.next();
 
     builder.end(

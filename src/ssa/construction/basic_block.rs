@@ -129,7 +129,7 @@ impl<'a, End> ConBasicBlock<'a, End> {
         }
     }
 
-    pub fn get_var(&mut self, var: &'a str, counter: &mut Counter) -> Option<VirtualRegister<'a>> {
+    pub fn get_var(&mut self, var: &'a str, counter: &mut Counter<'a>) -> Option<VirtualRegister<'a>> {
         if let Some(reg) = self.variables.get(var) {
             return Some(*reg);
         }

@@ -36,6 +36,7 @@ impl<'a> IrGraphNode for BasicBlock<'a> {
 
 #[derive(Debug, Clone, Copy, Eq)]
 pub struct BlockLabel<'a> {
+    func: &'a str,
     id: usize,
     tag: Option<&'a str>,
 }
@@ -46,20 +47,11 @@ impl<'a> BlockLabel<'a> {
     }
 }
 
-impl<'a> From<usize> for BlockLabel<'a> {
-    fn from(value: usize) -> Self {
-        Self {
-            id: value,
-            tag: None,
-        }
-    }
-}
-
 impl<'a> Display for BlockLabel<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let tag = self.tag.unwrap_or("label");
 
-        write!(f, "{}_{}", tag, self.id)
+        write!(f, "{}_{}_{}", self.func, tag, self.id)
     }
 }
 
@@ -81,19 +73,15 @@ impl<'a> Ord for BlockLabel<'a> {
     }
 }
 
-impl<'a> BlockLabel<'a> {
-    pub fn function(name: &'a str) -> Self {
-        Self { id: 0, tag: Some(name) }
-    }
-}
+impl<'a> Counter<'a> {
+    pub fn next_block_label(&mut self, tag: Option<&'a str>) -> BlockLabel<'a> {
+        let id: usize = self.next();
 
-impl Counter {
-    pub fn next_block_label<'a>(&mut self, tag: &'a str) -> BlockLabel<'a> {
-        let mut label: BlockLabel = self.next();
-
-        label.tag = Some(tag);
-
-        label
+        BlockLabel {
+            func: self.func(),
+            id,
+            tag,
+        }
     }
 }
 

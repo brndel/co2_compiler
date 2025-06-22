@@ -11,7 +11,7 @@ use super::{AssignPhi, ConBasicBlock, PhiAssignment};
 
 #[derive(Default)]
 pub struct Context<'a> {
-    pub counter: Counter,
+    pub counter: Counter<'a>,
     loops: Vec<Loop<'a>>,
     graph: IrGraph<ConBasicBlock<'a>>,
 }
@@ -154,7 +154,7 @@ impl<'a> BlockBuilder<'a> {
     pub fn new(start_label: BlockLabel<'a>, end_label: BlockLabel<'a>, ctx: &mut Context<'a>) -> Self {
         Self {
             end_label,
-            next_label: ctx.counter.next(),
+            next_label: ctx.counter.next_block_label(None),
             block: ConBasicBlock::new(start_label),
             is_closed: false,
         }
@@ -189,7 +189,7 @@ impl<'a> BlockBuilder<'a> {
 impl<'a> BlockBuilder<'a> {
     pub fn end(&mut self, end: BasicBlockEnd<'a>, ctx: &mut Context<'a>) {
         let next_label = self.next_label;
-        self.next_label = ctx.counter.next();
+        self.next_label = ctx.counter.next_block_label(None);
 
         let mut block = ConBasicBlock::new(next_label);
         swap(&mut block, &mut self.block);
