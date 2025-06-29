@@ -11,6 +11,7 @@ pub enum Register {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[allow(dead_code)]
 pub enum SystemRegister {
     Eax,
     Ebx,

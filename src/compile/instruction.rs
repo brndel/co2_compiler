@@ -1,16 +1,15 @@
-use std::{cell::Ref, fmt::Display};
+use std::fmt::Display;
 
 use crate::{
     compile::{
         Register,
         register::{
-            FunctionArgRegister, NumRegister, NumRegister64, Register64, StackRegister,
+            FunctionArgRegister, NumRegister64, Register64, StackRegister,
             SystemRegister,
         },
         value::Value,
     },
-    register_alloc::GraphColor,
-    ssa::{BlockLabel, VirtualRegister},
+    ssa::BlockLabel,
 };
 
 #[derive(Debug)]

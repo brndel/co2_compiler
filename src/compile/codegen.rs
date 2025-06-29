@@ -1,9 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    compile::{instruction::{BuiltinFuntion, FunctionPointer}, value::Value}, lexer::{BinaryOperator, Operator, UnaryOperator}, ssa::{
-        BasicBlock, BasicBlockEnd, BlockLabel, FunctionIrGraph, IrGraph, SsaInstruction, SsaValue, VirtualRegister
-    }
+    compile::{
+        instruction::{BuiltinFuntion, FunctionPointer},
+        value::Value,
+    },
+    lexer::{BinaryOperator, UnaryOperator},
+    ssa::{
+        BasicBlockEnd, BlockLabel, FunctionIrGraph, SsaInstruction, SsaValue,
+        VirtualRegister,
+    },
 };
 
 use super::{
@@ -21,7 +27,6 @@ pub fn generate_asm<'a>(
 
     let max_register = registers.values().max().cloned().unwrap_or_default();
 
-
     for block in &func.graph {
         if !visited_blocks.contains(&block.label) {
             continue;
@@ -31,7 +36,10 @@ pub fn generate_asm<'a>(
             instructions.push(Instruction::GlobalLabel { label: block.label });
             instructions.push(Instruction::Label { label: block.label });
             let params = func.params.iter().map(|param| registers[param]).collect();
-            instructions.push(Instruction::FunctionProlog { max_register, params });
+            instructions.push(Instruction::FunctionProlog {
+                max_register,
+                params,
+            });
         } else {
             instructions.push(Instruction::Label { label: block.label });
         }
@@ -187,20 +195,23 @@ pub fn generate_asm<'a>(
                         UnaryOperator::BitNot => instructions.push(Instruction::BitNot { reg }),
                     }
                 }
-                SsaInstruction::FunctionArg { index, target } => {
-                    
-                }
                 SsaInstruction::FunctionCall { target, name, args } => {
                     let dst = target.map(|target| registers[&target]);
-                    let params = args.into_iter().map(|arg| transform_value(arg, registers)).collect();
+                    let params = args
+                        .into_iter()
+                        .map(|arg| transform_value(arg, registers))
+                        .collect();
                     let func = match *name {
                         "print" => FunctionPointer::Builtin(BuiltinFuntion::Print),
                         "read" => FunctionPointer::Builtin(BuiltinFuntion::Read),
                         "flush" => FunctionPointer::Builtin(BuiltinFuntion::Flush),
-                        _ => FunctionPointer::User { label: func_labels[name] }
+                        _ => FunctionPointer::User {
+                            label: func_labels[name],
+                        },
                     };
                     instructions.push(Instruction::CallFunction { dst, func, params });
-                },
+                }
+                SsaInstruction::FunctionArg { .. } => (),
             }
         }
 
@@ -211,7 +222,7 @@ pub fn generate_asm<'a>(
             BasicBlockEnd::Return { value } => {
                 instructions.push(Instruction::Return {
                     value: transform_value(value, registers),
-                    max_register
+                    max_register,
                 });
             }
             BasicBlockEnd::ConditionalJump {

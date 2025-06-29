@@ -8,11 +8,10 @@ pub use register::Register;
 
 use instruction::Instruction;
 use std::path::Path;
-use std::{fmt::Write, fs, process::Command};
+use std::{fmt::Write, fs};
 
 pub fn compile_code(output: impl AsRef<Path>, instructions: Vec<Instruction>, build_asm: bool) {
     let temp_file_path = output.as_ref().with_extension("s");
-    let ouput_file_path = output.as_ref();
 
     if build_asm {
         let mut assembly = include_str!("template.s").to_string();
@@ -31,6 +30,10 @@ pub fn compile_code(output: impl AsRef<Path>, instructions: Vec<Instruction>, bu
 
     #[cfg(target_arch = "x86_64")]
     {
+        use std::process::Command;
+
+        let ouput_file_path = output.as_ref();
+
         let mut gcc = Command::new("gcc")
             .arg(&temp_file_path)
             .arg("-o")

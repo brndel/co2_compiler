@@ -5,7 +5,7 @@ use chumsky::{
     IterParser, Parser,
     error::Rich,
     extra,
-    prelude::{any, end, just, one_of, recursive},
+    prelude::{any, just, one_of, recursive},
     select,
     span::SimpleSpan,
     text::{digits, int, newline},

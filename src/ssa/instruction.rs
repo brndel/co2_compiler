@@ -91,7 +91,7 @@ impl<'a> SsaInstruction<'a> {
             SsaInstruction::PhiMove { target, .. } => Some(target),
             SsaInstruction::BinaryOp { target, .. } => Some(target),
             SsaInstruction::UnaryOp { target, .. } => Some(target),
-            SsaInstruction::FunctionArg { index, target, .. } => Some(target),
+            SsaInstruction::FunctionArg { target, .. } => Some(target),
             SsaInstruction::FunctionCall { target, .. } => target.as_ref(),
         }
     }

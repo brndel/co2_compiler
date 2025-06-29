@@ -1,7 +1,6 @@
 use std::fmt::Display;
 
-use crate::compile::{register::Register64, Register};
-
+use crate::compile::{Register, register::Register64};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Value {
@@ -25,6 +24,7 @@ impl<T: Into<Register>> From<T> for Value {
 }
 
 impl Value {
+    #[allow(dead_code)]
     pub fn to_64(self) -> Value64 {
         match self {
             Value::Register(register) => Value64::Register(register.into()),
@@ -34,6 +34,7 @@ impl Value {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub enum Value64 {
     Register(Register64),
     Immediate(i32),
