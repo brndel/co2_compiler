@@ -58,6 +58,7 @@ fn validate_statement<'a, Num>(
             if let Some(step) = step {
                 match step.as_ref() {
                     Statement::Assignment { .. } => (),
+                    Statement::FunctionCall(_) => (),
                     Statement::Declaration { ident, .. } => {
                         errors.push(SemanticError::DeclareInForLoopStep {
                             span: ident.1,
