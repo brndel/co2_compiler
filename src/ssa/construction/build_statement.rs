@@ -32,31 +32,32 @@ pub fn build_ir_statement<'a>(
                 builder.set_variable(ident.0, target);
             }
         }
-        Statement::Assignment { ident, op, value } => {
-            let value = build_ir_expr(value, ctx, builder);
+        Statement::Assignment { lvalue, op, value } => {
+            todo!()
+            // let value = build_ir_expr(value, ctx, builder);
 
-            let target = ctx.counter.next_register(ident.0);
+            // let target = ctx.counter.next_register(ident.0);
 
-            match op {
-                Some(op) => {
-                    let current_value = builder.get_variable(ident.0, ctx);
+            // match op {
+            //     Some(op) => {
+            //         let current_value = builder.get_variable(ident.0, ctx);
 
-                    builder.push_instruction(SsaInstruction::BinaryOp {
-                        target,
-                        a: SsaValue::Register(current_value),
-                        op: (*op).into(),
-                        b: value,
-                    });
-                }
-                None => {
-                    builder.push_instruction(SsaInstruction::Move {
-                        target,
-                        source: value,
-                    });
-                }
-            }
+            //         builder.push_instruction(SsaInstruction::BinaryOp {
+            //             target,
+            //             a: SsaValue::Register(current_value),
+            //             op: (*op).into(),
+            //             b: value,
+            //         });
+            //     }
+            //     None => {
+            //         builder.push_instruction(SsaInstruction::Move {
+            //             target,
+            //             source: value,
+            //         });
+            //     }
+            // }
 
-            builder.set_variable(ident.0, target);
+            // builder.set_variable(ident.0, target);
         }
         Statement::FunctionCall(fn_call) => {
             build_fn_call(fn_call, None, ctx, builder);

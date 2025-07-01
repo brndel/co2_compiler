@@ -13,12 +13,12 @@ pub struct Block<'a, Num = ValueNum> {
 #[derive(Debug, Clone)]
 pub enum Statement<'a, Num = ValueNum> {
     Declaration {
-        ty: Spanned<Type>,
+        ty: Spanned<Type<'a>>,
         ident: Spanned<&'a str>,
         value: Option<Expression<'a, Num>>,
     },
     Assignment {
-        ident: Spanned<&'a str>,
+        lvalue: Lvalue<'a, Num>,
         op: Option<AssignOperator>,
         value: Expression<'a, Num>,
     },
@@ -46,6 +46,23 @@ pub enum Statement<'a, Num = ValueNum> {
     Block(Block<'a, Num>),
 }
 
+
+#[derive(Debug, Clone)]
+pub enum Lvalue<'a, Num> {
+    Ident(Spanned<&'a str>),
+    Ptr {
+        lvalue: Box<Self>,
+        ptr: Ptr<'a, Num>
+    }
+}
+
+impl<'a, Num> From<(Lvalue<'a, Num>, Ptr<'a, Num>)> for Lvalue<'a, Num> {
+    fn from(value: (Lvalue<'a, Num>, Ptr<'a, Num>)) -> Self {
+        Self::Ptr { lvalue: Box::new(value.0), ptr: value.1 }
+    }
+}
+
+
 #[derive(Debug, Clone)]
 pub enum Expression<'a, Num = ValueNum> {
     Ident(Spanned<&'a str>),
@@ -53,11 +70,11 @@ pub enum Expression<'a, Num = ValueNum> {
     Bool(Spanned<bool>),
     Binary {
         a: Box<Self>,
-        op: BinaryOperator,
+        op: Spanned<BinaryOperator>,
         b: Box<Self>,
     },
     Unary {
-        op: UnaryOperator,
+        op: Spanned<UnaryOperator>,
         expr: Box<Self>,
     },
     Ternary {
@@ -66,12 +83,51 @@ pub enum Expression<'a, Num = ValueNum> {
         b: Box<Self>,
     },
     FunctionCall(FunctionCall<'a, Num>),
+    Access {
+        expr: Box<Self>,
+        ptr: Ptr<'a, Num>
+    },
+}
+
+impl<'a, Num> From<(Expression<'a, Num>, Ptr<'a, Num>)> for Expression<'a, Num> {
+    fn from(value: (Expression<'a, Num>, Ptr<'a, Num>)) -> Self {
+        Self::Access { expr: Box::new(value.0), ptr: value.1 }
+    }
 }
 
 #[derive(Debug, Clone)]
-pub struct FunctionCall<'a, Num = ValueNum> {
-    pub ident: Spanned<&'a str>,
-    pub args: Vec<Expression<'a, Num>>,
+pub enum Ptr<'a, Num = ValueNum> {
+    /// a.b
+    FieldAccess { ident: Spanned<&'a str> },
+    /// a->b
+    PtrFieldAccess { ident: Spanned<&'a str> },
+    /// a[b]
+    ArrayAccess { index: Box<Expression<'a, Num>> },
+    /// *a
+    PtrDeref,
+}
+
+#[derive(Debug, Clone)]
+pub enum FunctionCall<'a, Num = ValueNum> {
+    Alloc {
+        ty: Spanned<Type<'a>>,
+    },
+    AllocArray {
+        ty: Spanned<Type<'a>>,
+        len: Box<Expression<'a, Num>>,
+    },
+    Fn {
+        ident: Spanned<FunctionIdent<'a>>,
+        args: Vec<Expression<'a, Num>>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum FunctionIdent<'a> {
+    User(&'a str),
+    Print,
+    Read,
+    Flush,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

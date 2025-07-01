@@ -25,8 +25,11 @@ pub enum Separator {
     ParenClose,
     BraceOpen,
     BraceClose,
+    SqBracketOpen,
+    SqBracketClose,
     Semicolon,
-    Comma
+    Comma,
+    Dot,
 }
 
 

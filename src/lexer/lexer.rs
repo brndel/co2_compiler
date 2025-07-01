@@ -3,9 +3,12 @@ use std::str::FromStr;
 use super::{AssignOperator, Keyword, Operator, Separator, Spanned, Token};
 use chumsky::{
     IterParser, Parser,
+    combinator::DelimitedBy,
     error::Rich,
-    extra,
+    extra::{self, ParserExtra},
+    input::{Input, ValueInput},
     prelude::{any, just, one_of, recursive},
+    primitive::Just,
     select,
     span::SimpleSpan,
     text::{digits, int, newline},
@@ -35,8 +38,11 @@ pub fn lexer<'src>()
         ')' => Separator::ParenClose,
         '{' => Separator::BraceOpen,
         '}' => Separator::BraceClose,
+        '[' => Separator::SqBracketOpen,
+        ']' => Separator::SqBracketClose,
         ';' => Separator::Semicolon,
         ',' => Separator::Comma,
+        '.' => Separator::Dot,
     }
     .labelled("separator");
 
@@ -162,5 +168,61 @@ mod chumsky_fix {
                     .repeated(),
             )
             .to_slice()
+    }
+}
+
+pub trait Bracket {
+    const OPEN: Separator;
+    const CLOSE: Separator;
+}
+
+/// Normal parentheses: `()`
+pub struct Paren;
+impl Bracket for Paren {
+    const OPEN: Separator = Separator::ParenOpen;
+    const CLOSE: Separator = Separator::ParenClose;
+}
+
+/// Curly Bracket: `{}`
+pub struct Brace;
+impl Bracket for Brace {
+    const OPEN: Separator = Separator::BraceOpen;
+    const CLOSE: Separator = Separator::BraceClose;
+}
+
+/// Square Bracket: `[]`
+pub struct SqBracket;
+impl Bracket for SqBracket {
+    const OPEN: Separator = Separator::SqBracketOpen;
+    const CLOSE: Separator = Separator::SqBracketClose;
+}
+
+pub trait ParserBracketExt<'token, 'src, I, O, E>: Parser<'token, I, O, E>
+where
+    Self: Sized,
+    I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
+    E: ParserExtra<'token, I>,
+{
+    fn delimited_by_bracket<B: Bracket>(
+        self,
+        bracket: B,
+    ) -> DelimitedBy<Self, Just<Token<'src>, I, E>, Just<Token<'src>, I, E>, Token<'src>, Token<'src>>;
+}
+
+impl<'token, 'src, T: Parser<'token, I, O, E>, I, O, E> ParserBracketExt<'token, 'src, I, O, E>
+    for T
+where
+    I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
+    E: ParserExtra<'token, I>,
+{
+    fn delimited_by_bracket<B: Bracket>(
+        self,
+        bracket: B,
+    ) -> DelimitedBy<Self, Just<Token<'src>, I, E>, Just<Token<'src>, I, E>, Token<'src>, Token<'src>>
+    {
+        self.delimited_by(
+            just(Token::Separator(B::OPEN)),
+            just(Token::Separator(B::CLOSE)),
+        )
     }
 }

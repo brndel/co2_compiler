@@ -3,7 +3,7 @@ use std::num::IntErrorKind;
 use crate::{
     lexer::Spanned,
     parser::{Block, Expression, FunctionCall, ParseNum, Statement, ValueNum},
-    program::{Function, Program},
+    program::{FunctionDef, Program},
     semantic::SemanticError,
 };
 
@@ -11,27 +11,28 @@ pub fn map_number<'a>(
     errors: &mut Vec<SemanticError<'a>>,
     program: Program<'a, ParseNum<'a>>,
 ) -> Option<Program<'a>> {
-    let functions = program
-        .functions
-        .into_iter()
-        .map(
-            |Function {
-                 return_type,
-                 ident,
-                 params,
-                 block,
-             }| {
-                Some(Function {
-                    return_type,
-                    ident,
-                    params,
-                    block: map_number_block(errors, block)?,
-                })
-            },
-        )
-        .collect::<Option<_>>()?;
+    todo!()
+    // let functions = program
+    //     .functions
+    //     .into_iter()
+    //     .map(
+    //         |FunctionDef {
+    //              return_type,
+    //              ident,
+    //              params,
+    //              block,
+    //          }| {
+    //             Some(FunctionDef {
+    //                 return_type,
+    //                 ident,
+    //                 params,
+    //                 block: map_number_block(errors, block)?,
+    //             })
+    //         },
+    //     )
+    //     .collect::<Option<_>>()?;
 
-    Some(Program { functions })
+    // Some(Program { functions })
 }
 
 fn map_number_block<'a>(
@@ -69,20 +70,21 @@ fn map_number_statement<'a>(
             ident,
             value: Some(map_num_expr(errors, expr)?),
         },
-        Statement::Assignment { ident, op, value } => Statement::Assignment {
-            ident,
+        Statement::Assignment { lvalue, op, value } => Statement::Assignment {
+            lvalue: todo!(),
             op,
             value: map_num_expr(errors, value)?,
         },
-        Statement::FunctionCall(FunctionCall { ident, args }) => {
-            Statement::FunctionCall(FunctionCall {
-                ident,
-                args: args
-                    .into_iter()
-                    .map(|arg| map_num_expr(errors, arg))
-                    .collect::<Option<_>>()?,
-            })
-        }
+        Statement::FunctionCall(_) => todo!(),
+        // Statement::FunctionCall(FunctionCall { ident, args }) => {
+        //     Statement::FunctionCall(FunctionCall {
+        //         ident,
+        //         args: args
+        //             .into_iter()
+        //             .map(|arg| map_num_expr(errors, arg))
+        //             .collect::<Option<_>>()?,
+        //     })
+        // }
         Statement::Return { value: expr } => Statement::Return {
             value: map_num_expr(errors, expr)?,
         },
@@ -168,15 +170,17 @@ fn map_num_expr<'a>(
                 b: Box::new(b?),
             })
         }
-        Expression::FunctionCall(FunctionCall { ident, args }) => {
-            Some(Expression::FunctionCall(FunctionCall {
-                ident,
-                args: args
-                    .into_iter()
-                    .map(|arg| map_num_expr(errors, arg))
-                    .collect::<Option<_>>()?,
-            }))
-        }
+        Expression::FunctionCall(_) => todo!(),
+        // Expression::FunctionCall(FunctionCall { ident, args }) => {
+        //     Some(Expression::FunctionCall(FunctionCall {
+        //         ident,
+        //         args: args
+        //             .into_iter()
+        //             .map(|arg| map_num_expr(errors, arg))
+        //             .collect::<Option<_>>()?,
+        //     }))
+        // }
+        _ => todo!()
     }
 }
 

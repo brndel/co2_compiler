@@ -6,6 +6,7 @@ pub type Spanned<T> = (T, chumsky::span::SimpleSpan);
 
 use chumsky::span::SimpleSpan;
 pub use lexer::lexer;
+pub use lexer::{ParserBracketExt, Paren, Brace, SqBracket};
 pub use token::*;
 pub use op::*;
 

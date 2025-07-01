@@ -32,15 +32,18 @@ pub enum Operator {
     // Ternary
     TernaryQuestionMark,
     TernaryColon,
+    // Arrow
+    Arrow,
 }
 
 impl Operator {
     pub fn parser<'src>()
     -> impl Parser<'src, &'src str, Operator, extra::Err<Rich<'src, char, SimpleSpan>>> + Clone
     {
-        // Int math
-        just("+")
-            .to(Operator::Plus)
+        just("->")
+            .to(Operator::Arrow)
+            // Int math
+            .or(just("+").to(Operator::Plus))
             .or(just("-").to(Operator::Minus))
             .or(just("*").to(Operator::Mul))
             .or(just("/").to(Operator::Div))
@@ -102,6 +105,8 @@ impl AsRef<str> for Operator {
             // Ternary
             Operator::TernaryQuestionMark => "?",
             Operator::TernaryColon => ":",
+            // Arrow
+            Operator::Arrow => "->",
         }
     }
 }

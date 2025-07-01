@@ -4,16 +4,19 @@ use chumsky::{
     extra,
     input::ValueInput,
     pratt::{infix, left, prefix},
-    prelude::{just, recursive},
+    prelude::{end, just, recursive},
     select,
     span::SimpleSpan,
 };
 
 use crate::{
     core::Type,
-    lexer::{BinaryOperator, Keyword, Operator, Separator, Spanned, Token, UnaryOperator},
-    parser::FunctionCall,
-    program::{Function, FunctionParam, Program},
+    lexer::{
+        BinaryOperator, Brace, Keyword, Operator, Paren, ParserBracketExt, Separator, Spanned,
+        SqBracket, Token, UnaryOperator,
+    },
+    parser::{FunctionCall, FunctionIdent, Lvalue, Ptr},
+    program::{FunctionDef, FunctionParam, Program, StructDef, StructField, TopLevelDef},
 };
 
 use super::{
@@ -30,17 +33,21 @@ pub fn program_parser<'token, 'src: 'token, I>() -> impl Parser<
 where
     I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
 {
-    let function_def = parse_function_defintion();
+    let function_def = parse_function_def().map(TopLevelDef::Function);
+    let struct_def = parse_struct_def().map(TopLevelDef::Struct);
 
-    function_def.repeated().collect().map(|functions| Program {
-        functions,
-    })
+    let def = struct_def.or(function_def);
+
+    def.repeated()
+        .collect()
+        .then_ignore(end())
+        .map(|defs| Program { defs })
 }
 
-pub fn parse_function_defintion<'token, 'src: 'token, I>() -> impl Parser<
+pub fn parse_function_def<'token, 'src: 'token, I>() -> impl Parser<
     'token,
     I,
-    Function<'src, ParseNum<'src>>,
+    FunctionDef<'src, ParseNum<'src>>,
     extra::Err<Rich<'token, Token<'src>, SimpleSpan>>,
 >
 where
@@ -64,18 +71,44 @@ where
             param
                 .separated_by(just(Token::Separator(Separator::Comma)))
                 .collect()
-                .delimited_by(
-                    just(Token::Separator(Separator::ParenOpen)),
-                    just(Token::Separator(Separator::ParenClose)),
-                ),
+                .delimited_by_bracket(Paren),
         )
         .then(block)
-        .map(|(((return_type, ident), params), block)| Function {
+        .map(|(((return_type, ident), params), block)| FunctionDef {
             return_type,
             ident,
             params,
             block,
-        }).labelled("function").as_context()
+        })
+        .labelled("function_def")
+        .as_context()
+}
+
+pub fn parse_struct_def<'token, 'src: 'token, I>()
+-> impl Parser<'token, I, StructDef<'src>, extra::Err<Rich<'token, Token<'src>, SimpleSpan>>>
+where
+    I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
+{
+    let ty = parse_ty();
+
+    let ident = select! {
+        Token::Ident(ident) = e => (ident, e.span()),
+    };
+
+    let field = ty
+        .then(ident.clone())
+        .then_ignore(just(Token::Separator(Separator::Semicolon)))
+        .map(|(ty, ident)| StructField { ty, ident });
+
+    let fields = field.repeated().collect().delimited_by_bracket(Brace);
+
+    just(Token::Keyword(Keyword::Struct))
+        .ignore_then(ident)
+        .then(fields)
+        .then_ignore(just(Token::Separator(Separator::Semicolon)))
+        .map(|(ident, fields)| StructDef { ident, fields })
+        .labelled("struct_def")
+        .as_context()
 }
 
 pub fn parse_block<'token, 'src: 'token, I>()
@@ -88,9 +121,7 @@ where
 
         let statements = statement.repeated().collect();
 
-        let block = just(Token::Separator(Separator::BraceOpen))
-            .ignore_then(statements)
-            .then_ignore(just(Token::Separator(Separator::BraceClose)));
+        let block = statements.delimited_by_bracket(Brace);
 
         block.map(|statements| Block { statements })
     })
@@ -115,30 +146,32 @@ where
         + 'token,
 {
     recursive(|statement| {
-        let expr = parse_expr();
+        let ty = parse_ty();
+
+        let expr = parse_expr(ty.clone());
 
         let lvalue = recursive(|lvalue| {
-            lvalue
-                .delimited_by(
-                    just(Token::Separator(Separator::ParenOpen)),
-                    just(Token::Separator(Separator::ParenClose)),
-                )
-                .or(select! {
-                    Token::Ident(ident) => ident,
-                }
-                .map_with(|ident, extra| (ident, extra.span())))
+            let ident = select! {
+                Token::Ident(ident) => ident,
+            }
+            .map_with(|ident, extra| Lvalue::Ident((ident, extra.span())));
+
+            let lvalue = ident.or(lvalue.delimited_by_bracket(Paren));
+
+            let ptr = parse_ptr_modifiers(lvalue, expr.clone());
+
+            ptr
         })
         .labelled("lvalue");
 
         let assign = lvalue
             .then(select! {Token::Assign(op) => op})
             .then(expr.clone())
-            .map(|((ident, op), value)| Statement::Assignment { ident, op, value })
+            .map(|((lvalue, op), value)| Statement::Assignment { lvalue, op, value })
             .labelled("assign");
 
-        let ty = parse_ty();
-
         let decl = ty
+            .clone()
             .then(
                 select! {
                     Token::Ident(ident) => ident,
@@ -149,7 +182,7 @@ where
             .map(|((ty, ident), value)| Statement::Declaration { ty, ident, value })
             .labelled("declaration");
 
-        let fn_call = parse_function_call(expr.clone()).map(Statement::FunctionCall);
+        let fn_call = parse_function_call(expr.clone(), ty.clone()).map(Statement::FunctionCall);
 
         let simple_statement = assign.or(decl).or(fn_call);
 
@@ -165,9 +198,7 @@ where
         let control_statement = ret.or(ctrl);
 
         let r#if = just(Token::Keyword(Keyword::If))
-            .then(just(Token::Separator(Separator::ParenOpen)))
-            .ignore_then(expr.clone())
-            .then_ignore(just(Token::Separator(Separator::ParenClose)))
+            .ignore_then(expr.clone().delimited_by_bracket(Paren))
             .then(statement.clone())
             .then(
                 just(Token::Keyword(Keyword::Else))
@@ -181,23 +212,23 @@ where
             });
 
         let r#while = just(Token::Keyword(Keyword::While))
-            .then(just(Token::Separator(Separator::ParenOpen)))
-            .ignore_then(expr.clone())
-            .then_ignore(just(Token::Separator(Separator::ParenClose)))
+            .ignore_then(expr.clone().delimited_by_bracket(Paren))
             .then(statement.clone())
             .map(|(condition, then)| Statement::While {
                 condition,
                 body: Box::new(then),
             });
 
-        let r#for = just(Token::Keyword(Keyword::For))
-            .then(just(Token::Separator(Separator::ParenOpen)))
-            .ignore_then(simple_statement.clone().or_not())
+        let for_header = simple_statement
+            .clone()
+            .or_not()
             .then_ignore(just(Token::Separator(Separator::Semicolon)))
             .then(expr.clone())
             .then_ignore(just(Token::Separator(Separator::Semicolon)))
-            .then(simple_statement.clone().or_not())
-            .then_ignore(just(Token::Separator(Separator::ParenClose)))
+            .then(simple_statement.clone().or_not());
+
+        let r#for = just(Token::Keyword(Keyword::For))
+            .ignore_then(for_header.delimited_by_bracket(Paren))
             .then(statement.clone())
             .map(|(((init, condition), step), body)| Statement::For {
                 init: init.map(Box::new),
@@ -222,7 +253,9 @@ where
     })
 }
 
-pub fn parse_expr<'token, 'src: 'token, I>() -> impl Parser<
+pub fn parse_expr<'token, 'src: 'token, I, T>(
+    ty: T,
+) -> impl Parser<
     'token,
     I,
     Expression<'src, ParseNum<'src>>,
@@ -230,9 +263,12 @@ pub fn parse_expr<'token, 'src: 'token, I>() -> impl Parser<
 > + Clone
 where
     I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
+    T: Parser<'token, I, Spanned<Type<'src>>, extra::Err<Rich<'token, Token<'src>, SimpleSpan>>>
+        + Clone
+        + 'token,
 {
     recursive(|expr| {
-        let fn_call = parse_function_call(expr.clone()).map(Expression::FunctionCall);
+        let fn_call = parse_function_call(expr.clone(), ty).map(Expression::FunctionCall);
 
         let value = select! {
             Token::Ident(ident) = e => Expression::Ident((ident, e.span())),
@@ -244,20 +280,21 @@ where
         .labelled("value")
         .as_context();
 
-        let atom = fn_call.or(value).or(expr.clone().delimited_by(
-            just(Token::Separator(Separator::ParenOpen)),
-            just(Token::Separator(Separator::ParenClose)),
-        ));
+        let atom = fn_call
+            .or(value)
+            .or(expr.clone().delimited_by_bracket(Paren));
 
         macro_rules! binary_fold {
             () => {
-                |a, op, b, _| Expression::Binary {
+                |a, op, b, e| Expression::Binary {
                     a: Box::new(a),
-                    op,
+                    op: (op, e.span()),
                     b: Box::new(b),
                 }
             };
         }
+
+        let atom = parse_ptr_modifiers(atom, expr.clone());
 
         let operators = atom.pratt((
             // logical not, bitwise not, unary minus
@@ -268,8 +305,8 @@ where
                     Token::Operator(Operator::LogicNot) => UnaryOperator::LogicNot,
                     Token::Operator(Operator::BitNot) => UnaryOperator::BitNot,
                 },
-                |op, expr, _| Expression::Unary {
-                    op,
+                |op, expr, e| Expression::Unary {
+                    op: (op, e.span()),
                     expr: Box::new(expr),
                 },
             ),
@@ -385,8 +422,56 @@ where
     .as_context()
 }
 
-pub fn parse_function_call<'token, 'src: 'token, I, T>(
+pub fn parse_ptr_modifiers<'token, 'src: 'token, I, T, U, V>(
+    parser: U,
+    expr_parser: V,
+) -> impl Parser<'token, I, T, extra::Err<Rich<'token, Token<'src>, SimpleSpan>>> + Clone
+where
+    (T, Ptr<'src, ParseNum<'src>>): Into<T>,
+    I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
+    U: Parser<'token, I, T, extra::Err<Rich<'token, Token<'src>, SimpleSpan>>> + Clone + 'token,
+    V: Parser<
+            'token,
+            I,
+            Expression<'src, ParseNum<'src>>,
+            extra::Err<Rich<'token, Token<'src>, SimpleSpan>>,
+        > + Clone
+        + 'token,
+{
+    let ptr_deref = just(Token::Operator(Operator::Mul))
+        .repeated()
+        .foldr(parser.clone(), |_, expr| (expr, Ptr::PtrDeref).into());
+
+    let ident = select! {
+        Token::Ident(ident) = e => (ident, e.span())
+    };
+
+    let field_access = just(Token::Separator(Separator::Dot))
+        .ignore_then(ident.clone())
+        .map(|ident| Ptr::FieldAccess { ident });
+    let ptr_field_access = just(Token::Operator(Operator::Arrow))
+        .ignore_then(ident.clone())
+        .map(|ident| Ptr::PtrFieldAccess { ident });
+    let array_access = expr_parser
+        .delimited_by_bracket(SqBracket)
+        .map(|expr| Ptr::ArrayAccess {
+            index: Box::new(expr),
+        });
+
+    let access = ptr_deref.foldl(
+        field_access
+            .or(ptr_field_access)
+            .or(array_access)
+            .repeated(),
+        |expr, ptr| (expr, ptr).into(),
+    );
+
+    access
+}
+
+pub fn parse_function_call<'token, 'src: 'token, I, T, U>(
     expr_parser: T,
+    ty_parser: U,
 ) -> impl Parser<
     'token,
     I,
@@ -400,37 +485,75 @@ where
             I,
             Expression<'src, ParseNum<'src>>,
             extra::Err<Rich<'token, Token<'src>, SimpleSpan>>,
-        > + Clone
-        + 'token,
+        > + Clone,
+    U: Parser<'token, I, Spanned<Type<'src>>, extra::Err<Rich<'token, Token<'src>, SimpleSpan>>>
+        + Clone,
 {
     let ident = select! {
-        Token::Ident(ident) = e => (ident, e.span()),
-        Token::Keyword(Keyword::Print) = e => ("print", e.span()),
-        Token::Keyword(Keyword::Read) = e => ("read", e.span()),
-        Token::Keyword(Keyword::Flush) = e => ("flush", e.span()),
+        Token::Ident(ident) = e => (FunctionIdent::User(ident), e.span()),
+        Token::Keyword(Keyword::Print) = e => (FunctionIdent::Print, e.span()),
+        Token::Keyword(Keyword::Read) = e => (FunctionIdent::Read, e.span()),
+        Token::Keyword(Keyword::Flush) = e => (FunctionIdent::Flush, e.span()),
     };
 
-    ident
-        .then(
-            expr_parser
-                .separated_by(just(Token::Separator(Separator::Comma)))
-                .collect()
-                .delimited_by(
-                    just(Token::Separator(Separator::ParenOpen)),
-                    just(Token::Separator(Separator::ParenClose)),
-                ),
+    let arg_list = expr_parser
+        .clone()
+        .separated_by(just(Token::Separator(Separator::Comma)))
+        .collect();
+
+    let normal_fn = ident
+        .then(arg_list.delimited_by_bracket(Paren))
+        .map(|(ident, args)| FunctionCall::Fn { ident, args });
+
+    let alloc_fn = just(Token::Keyword(Keyword::Alloc))
+        .ignore_then(ty_parser.clone().delimited_by_bracket(Paren))
+        .map(|ty| FunctionCall::Alloc { ty });
+
+    let alloc_array_fn = just(Token::Keyword(Keyword::AllocArray))
+        .ignore_then(
+            ty_parser
+                .then_ignore(just(Token::Separator(Separator::Comma)))
+                .then(expr_parser)
+                .delimited_by_bracket(Paren),
         )
-        .map(|(ident, args)| FunctionCall { ident, args })
+        .map(|(ty, len)| FunctionCall::AllocArray {
+            ty,
+            len: Box::new(len),
+        });
+
+    normal_fn.or(alloc_fn).or(alloc_array_fn)
 }
 
 pub fn parse_ty<'token, 'src: 'token, I>()
--> impl Parser<'token, I, Spanned<Type>, extra::Err<Rich<'token, Token<'src>, SimpleSpan>>> + Clone
+-> impl Parser<'token, I, Spanned<Type<'src>>, extra::Err<Rich<'token, Token<'src>, SimpleSpan>>> + Clone
 where
     I: ValueInput<'token, Token = Token<'src>, Span = SimpleSpan>,
 {
-    select! {
+    let builtin_ty = select! {
         Token::Keyword(Keyword::Int) => Type::Int,
         Token::Keyword(Keyword::Bool) => Type::Bool,
     }
-    .map_with(|ty, extra| (ty, extra.span()))
+    .map_with(|ty, extra| (ty, extra.span()));
+
+    let struct_ty = just(Token::Keyword(Keyword::Struct))
+        .ignore_then(select! {
+            Token::Ident(ident) => ident,
+        })
+        .map_with(|ident, extra| (Type::Struct(ident), extra.span()));
+
+    let ty = builtin_ty.or(struct_ty);
+
+    let ptr = just(Token::Operator(Operator::Mul)).to(true);
+    let arr = just(Token::Separator(Separator::SqBracketOpen))
+        .then(just(Token::Separator(Separator::SqBracketClose)))
+        .to(false);
+
+    ty.foldl(ptr.or(arr).repeated(), |ty, is_ptr| {
+        if is_ptr {
+            (Type::Pointer(Box::new(ty.0)), ty.1)
+        } else {
+            (Type::Array(Box::new(ty.0)), ty.1)
+        }
+    })
+    .labelled("type")
 }

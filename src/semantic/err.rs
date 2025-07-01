@@ -30,12 +30,12 @@ pub enum SemanticError<'a> {
         ident: Spanned<&'a str>,
     },
     MissmatchedType {
-        ty: Spanned<Type>,
-        expected_type: Type,
+        ty: Spanned<Type<'a>>,
+        expected_type: Type<'a>,
     },
     MissmatchedBinaryType {
-        a: Spanned<Type>,
-        b: Spanned<Type>,
+        a: Spanned<Type<'a>>,
+        b: Spanned<Type<'a>>,
     },
     LoopControlsOutsideLoop {
         keyword: Spanned<Keyword>,

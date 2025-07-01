@@ -2,15 +2,17 @@ use crate::{parser::Statement, program::Program, semantic::SemanticError};
 
 pub fn check_return<'a, Num>(errors: &mut Vec<SemanticError<'a>>, program: &Program<'a, Num>) {
 
-    for func in &program.functions {
-        let does_return = func.block.statements.iter().any(does_return);
+    todo!()
+
+    // for func in &program.functions {
+    //     let does_return = func.block.statements.iter().any(does_return);
     
-        if !does_return {
-            errors.push(SemanticError::NoReturnInFunction {
-                ident: func.ident,
-            });
-        }
-    }
+    //     if !does_return {
+    //         errors.push(SemanticError::NoReturnInFunction {
+    //             ident: func.ident,
+    //         });
+    //     }
+    // }
 }
 
 pub fn does_return<'a, Num>(statement: &Statement<'a, Num>) -> bool {

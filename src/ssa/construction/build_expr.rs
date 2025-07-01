@@ -17,7 +17,7 @@ pub fn build_ir_expr<'a>(
         Expression::Ident(ident) => SsaValue::Register(builder.get_variable(ident.0, ctx)),
         Expression::Num(num) => SsaValue::ImmediateNum(num.num()),
         Expression::Bool((value, _)) => SsaValue::ImmediateBool(*value),
-        Expression::Binary { a, op, b } => match op {
+        Expression::Binary { a, op, b } => match op.0 {
             BinaryOperator::LogicAnd => build_ir_ternary(
                 a,
                 b,
@@ -45,7 +45,7 @@ pub fn build_ir_expr<'a>(
                 builder.push_instruction(SsaInstruction::BinaryOp {
                     target,
                     a,
-                    op: *op,
+                    op,
                     b,
                 });
 
@@ -71,7 +71,7 @@ pub fn build_ir_expr<'a>(
             let target = ctx.counter.next();
             builder.push_instruction(SsaInstruction::UnaryOp {
                 target,
-                op: *op,
+                op: op.0,
                 value,
             });
 
@@ -92,6 +92,7 @@ pub fn build_ir_expr<'a>(
 
             SsaValue::Register(target)
         }
+        _ => todo!()
     }
 }
 
@@ -154,13 +155,14 @@ pub fn build_fn_call<'a>(
     ctx: &mut Context<'a>,
     builder: &mut BlockBuilder<'a>,
 ) {
-    let args = fn_call.args
-        .iter()
-        .map(|arg| build_ir_expr(arg, ctx, builder))
-        .collect();
-    builder.push_instruction(SsaInstruction::FunctionCall {
-        target,
-        name: fn_call.ident.0,
-        args,
-    });
+    todo!()
+    // let args = fn_call.args
+    //     .iter()
+    //     .map(|arg| build_ir_expr(arg, ctx, builder))
+    //     .collect();
+    // builder.push_instruction(SsaInstruction::FunctionCall {
+    //     target,
+    //     name: fn_call.ident.0,
+    //     args,
+    // });
 }

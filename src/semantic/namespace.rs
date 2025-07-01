@@ -9,21 +9,21 @@ use crate::{
     core::Type,
     lexer::Spanned,
     parser::FunctionCall,
-    program::{Function, FunctionParam, Program},
+    program::{FunctionDef, FunctionParam, Program},
 };
 
 use super::SemanticError;
 
-pub struct Namespace<'src, 'parent, T = VariableStatus> {
+pub struct Namespace<'src, 'parent, T = VariableStatus<'src>> {
     parent: Option<&'parent Self>,
     variables: BTreeMap<&'src str, T>,
     local_assigned_variables: BTreeSet<&'src str>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VariableStatus {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VariableStatus<'a> {
     declared_at: SimpleSpan,
-    ty: Type,
+    ty: Type<'a>,
     is_assigned: bool,
 }
 
@@ -53,8 +53,8 @@ impl<'src, 'parent, T> Namespace<'src, 'parent, T> {
     }
 }
 
-impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus> {
-    fn get_var(&self, ident: &str) -> Option<&VariableStatus> {
+impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus<'src>> {
+    fn get_var(&self, ident: &str) -> Option<&VariableStatus<'src>> {
         if let Some(parent) = &self.parent {
             if let Some(var) = parent.get_var(ident) {
                 return Some(var);
@@ -67,7 +67,7 @@ impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus> {
     pub fn declare(
         &mut self,
         ident: Spanned<&'src str>,
-        ty: Type,
+        ty: Type<'src>,
         assign: bool,
     ) -> Result<(), SemanticError<'src>> {
         if let Some(staus) = self.get_var(ident.0) {
@@ -91,15 +91,15 @@ impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus> {
     pub fn assign(
         &mut self,
         ident: Spanned<&'src str>,
-        ty: Spanned<Type>,
+        ty: Spanned<Type<'src>>,
     ) -> Result<(), SemanticError<'src>> {
         let var_ty;
 
         if let Some(status) = self.variables.get_mut(ident.0) {
             status.is_assigned = true;
-            var_ty = status.ty;
+            var_ty = status.ty.clone();
         } else if let Some(status) = self.get_var(ident.0) {
-            var_ty = status.ty;
+            var_ty = status.ty.clone();
 
             if !status.is_assigned {
                 self.local_assigned_variables.insert(ident.0);
@@ -169,13 +169,13 @@ impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus> {
         }
     }
 
-    pub fn get_type(&self, ident: Spanned<&'src str>) -> Result<Type, SemanticError<'src>> {
+    pub fn get_type(&self, ident: Spanned<&'src str>) -> Result<Type<'src>, SemanticError<'src>> {
         match self.get_var(ident.0) {
             Some(VariableStatus {
                 declared_at: _,
                 ty,
                 is_assigned: _,
-            }) => Ok(*ty),
+            }) => Ok(ty.clone()),
             None => Err(SemanticError::NotDeclared { ident }),
         }
     }
@@ -197,7 +197,7 @@ impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus> {
 
 struct NamespaceVariableIter<'parent, 'src> {
     namespace: &'parent Namespace<'src, 'parent>,
-    iter: Keys<'parent, &'src str, VariableStatus>,
+    iter: Keys<'parent, &'src str, VariableStatus<'src>>,
 }
 
 impl<'parent, 'src> NamespaceVariableIter<'parent, 'src> {
@@ -237,7 +237,7 @@ pub enum FunctionInfo<'src> {
     Read,
     Flush,
     User {
-        return_type: Spanned<Type>,
+        return_type: Spanned<Type<'src>>,
         ident: Spanned<&'src str>,
         params: Vec<FunctionParam<'src>>,
     },
@@ -249,7 +249,7 @@ impl<'src> FunctionInfo<'src> {
             FunctionInfo::Print => Type::Int,
             FunctionInfo::Read => Type::Int,
             FunctionInfo::Flush => Type::Int,
-            FunctionInfo::User { return_type, .. } => return_type.0,
+            FunctionInfo::User { return_type, .. } => return_type.0.clone(),
         }
     }
 
@@ -282,43 +282,46 @@ impl<'src> FunctionNamespace<'src> {
 
         let mut this = Self { functions };
 
-        for func in &program.functions {
-            match this.add_function(func) {
-                Ok(()) => (),
-                Err(err) => errors.push(err),
-            }
-        }
+        todo!()
+        // for func in &program.functions {
+        //     match this.add_function(func) {
+        //         Ok(()) => (),
+        //         Err(err) => errors.push(err),
+        //     }
+        // }
 
-        this
+        // this
     }
 
-    fn add_function<Num>(&mut self, func: &Function<'src, Num>) -> Result<(), SemanticError<'src>> {
-        if let Some(FunctionInfo::User { ident, .. }) = self.functions.get(func.ident.0) {
-            Err(SemanticError::FunctionAlreadyDefined {
-                ident: func.ident,
-                defined_at: ident.1,
-            })
-        } else {
-            self.functions.insert(
-                func.ident.0,
-                FunctionInfo::User {
-                    return_type: func.return_type,
-                    ident: func.ident,
-                    params: func.params.clone(),
-                },
-            );
-            Ok(())
-        }
+    fn add_function<Num>(&mut self, func: &FunctionDef<'src, Num>) -> Result<(), SemanticError<'src>> {
+        todo!()
+        // if let Some(FunctionInfo::User { ident, .. }) = self.functions.get(func.ident.0) {
+        //     Err(SemanticError::FunctionAlreadyDefined {
+        //         ident: func.ident,
+        //         defined_at: ident.1,
+        //     })
+        // } else {
+        //     self.functions.insert(
+        //         func.ident.0,
+        //         FunctionInfo::User {
+        //             return_type: func.return_type,
+        //             ident: func.ident,
+        //             params: func.params.clone(),
+        //         },
+        //     );
+        //     Ok(())
+        // }
     }
 
     pub fn get_function<Num>(
         &self,
         fn_call: &FunctionCall<'src, Num>,
     ) -> Result<&FunctionInfo<'src>, SemanticError<'src>> {
-        self.functions
-            .get(fn_call.ident.0)
-            .ok_or(SemanticError::FunctionNotDefined {
-                call_ident: fn_call.ident,
-            })
+        todo!()
+        // self.functions
+        //     .get(fn_call.ident.0)
+        //     .ok_or(SemanticError::FunctionNotDefined {
+        //         call_ident: fn_call.ident,
+        //     })
     }
 }

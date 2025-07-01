@@ -9,7 +9,7 @@ use builder::{BlockBuilder, Context};
 
 use crate::{
     parser::Statement,
-    program::Function,
+    program::FunctionDef,
     ssa::BlockLabel,
 };
 
@@ -23,7 +23,7 @@ pub struct FunctionIrGraph<'a> {
 }
 
 impl<'a> FunctionIrGraph<'a> {
-    pub fn new(func: Function<'a>) -> Self {
+    pub fn new(func: FunctionDef<'a>) -> Self {
         let ident = func.ident.0;
         let mut ctx = Context::new(ident);
 
