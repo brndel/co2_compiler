@@ -1,9 +1,6 @@
-use crate::{
-    parser::ParseNum,
-    program::Program, semantic::namespace::StructNamespace,
-};
+use crate::{parser::ParseNum, program::Program, semantic::namespace::StructNamespace};
 
-use super::{analyzer, SemanticError};
+use super::{SemanticError, analyzer};
 
 pub struct Analyzed<'a> {
     pub program: Program<'a>,
@@ -23,13 +20,11 @@ impl<'a> Analyzed<'a> {
         analyzer::check_return(&mut errors, &program);
         let program = analyzer::map_number(&mut errors, program);
 
-        if let Some(program) = program && errors.is_empty() {
-            Ok(Self {
-                program,
-                structs,
-            })
-        } else {
-            Err(errors)
+        if let Some(program) = program {
+            if errors.is_empty() {
+                return Ok(Self { program, structs });
+            }
         }
+        return Err(errors);
     }
 }
