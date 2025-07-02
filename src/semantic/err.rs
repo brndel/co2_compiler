@@ -63,6 +63,12 @@ pub enum SemanticError<'a> {
     MainFnWithParams {
         ident: Spanned<&'a str>,
     },
+    UnknownStruct {
+        ident: Spanned<&'a str>,
+    },
+    RecursiveStruct {
+        ident: Spanned<&'a str>,
+    },
 }
 
 impl<'a> SemanticError<'a> {
@@ -102,6 +108,8 @@ impl<'a> SemanticError<'a> {
             } => call_ident.1,
             SemanticError::NoMainFunction => SimpleSpan::splat(0),
             SemanticError::MainFnWithParams { ident } => ident.1,
+            SemanticError::UnknownStruct { ident } => ident.1,
+            SemanticError::RecursiveStruct { ident } => ident.1,
         }
     }
 
@@ -167,6 +175,12 @@ impl<'a> SemanticError<'a> {
             SemanticError::NoMainFunction => format!("No main function found in program"),
             SemanticError::MainFnWithParams { ident: _ } => {
                 format!("Main function is not allowed to have parameters")
+            }
+            SemanticError::UnknownStruct { ident } => {
+                format!("Unkown struct '{}'", ident.0)
+            }
+            SemanticError::RecursiveStruct { ident } => {
+                format!("Recusive loop found in struct '{}'", ident.0)
             }
         }
     }
@@ -235,6 +249,12 @@ impl<'a> SemanticError<'a> {
             } => vec![Label::new(source.span(&call_ident.1)).with_message(self.message())],
             SemanticError::NoMainFunction => vec![],
             SemanticError::MainFnWithParams { ident } => {
+                vec![Label::new(source.span(&ident.1)).with_message(self.message())]
+            }
+            SemanticError::UnknownStruct { ident } => {
+                vec![Label::new(source.span(&ident.1)).with_message(self.message())]
+            }
+            SemanticError::RecursiveStruct { ident } => {
                 vec![Label::new(source.span(&ident.1)).with_message(self.message())]
             }
         }

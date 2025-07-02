@@ -7,6 +7,7 @@ mod program;
 mod register_alloc;
 mod semantic;
 mod ssa;
+mod util;
 
 use std::{collections::BTreeMap, fs::read_to_string, mem::swap, ops::Range, process::exit};
 
@@ -43,15 +44,17 @@ fn main() {
     #[cfg(debug_assertions)]
     dbg!(&program);
 
-    // let analyzed = analyze_program(program, source);
+    let analyzed = analyze_program(program, source);
 
-    // let Some(analyzed) = analyzed else {
-    //     println!("Semantic analyzer failed");
-    //     exit(7);
-    // };
+    let Some(analyzed) = analyzed else {
+        println!("Semantic analyzer failed");
+        exit(7);
+    };
 
-    // #[cfg(debug_assertions)]
-    // println!("Semantic analyzer passed");
+    dbg!(analyzed.structs);
+
+    #[cfg(debug_assertions)]
+    println!("Semantic analyzer passed");
 
     // let func_graphs =  analyzed.program.functions.into_iter().map(|func | FunctionIrGraph::new(func)).collect::<Vec<_>>();
 
@@ -73,18 +76,16 @@ fn main() {
 
     //     let registers = live_graph.greedy_coloring::<Register>();
 
-
     //     let mut asm = generate_asm(func, &registers, live_graph.visited_blocks(), &func_labels);
 
     //     assembly.append(&mut asm);
     // }
 
-
     // #[cfg(debug_assertions)]
     // for instr in &assembly {
     //     println!("{:?}", instr);
     // }
-    
+
     // compile_code(args.output_file, assembly, true);
 
     // exit(0);
@@ -92,8 +93,6 @@ fn main() {
 
 fn parse_file<'a>(source: SourceFile<'a>) -> Option<Program<'a, ParseNum<'a>>> {
     let (tokens, lex_errors) = lexer().parse(source.content).into_output_errors();
-
-    dbg!(&tokens);
 
     let (program, parse_errors) = if let Some(tokens) = &tokens {
         program_parser()

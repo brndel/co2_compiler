@@ -40,3 +40,20 @@ pub struct StructField<'a> {
     pub ty: Spanned<Type<'a>>,
     pub ident: Spanned<&'a str>,
 }
+
+
+impl<'a, Num> Program<'a, Num> {
+    pub fn functions(&self) -> impl Iterator<Item = &FunctionDef<'a, Num>> {
+        self.defs.iter().filter_map(|def| match def {
+            TopLevelDef::Function(function_def) => Some(function_def),
+            TopLevelDef::Struct(_) => None,
+        })
+    }
+
+    pub fn structs(&self) -> impl Iterator<Item = &StructDef<'a>> {
+        self.defs.iter().filter_map(|def| match def {
+            TopLevelDef::Function(_) => None,
+            TopLevelDef::Struct(struct_def) => Some(struct_def),
+        })
+    }
+}

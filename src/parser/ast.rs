@@ -48,7 +48,7 @@ pub enum Statement<'a, Num = ValueNum> {
 
 
 #[derive(Debug, Clone)]
-pub enum Lvalue<'a, Num> {
+pub enum Lvalue<'a, Num = ValueNum> {
     Ident(Spanned<&'a str>),
     Ptr {
         lvalue: Box<Self>,

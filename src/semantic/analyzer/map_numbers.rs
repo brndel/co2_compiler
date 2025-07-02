@@ -2,8 +2,8 @@ use std::num::IntErrorKind;
 
 use crate::{
     lexer::Spanned,
-    parser::{Block, Expression, FunctionCall, ParseNum, Statement, ValueNum},
-    program::{FunctionDef, Program},
+    parser::{Block, Expression, FunctionCall, Lvalue, ParseNum, Ptr, Statement, ValueNum},
+    program::{FunctionDef, Program, TopLevelDef},
     semantic::SemanticError,
 };
 
@@ -11,28 +11,26 @@ pub fn map_number<'a>(
     errors: &mut Vec<SemanticError<'a>>,
     program: Program<'a, ParseNum<'a>>,
 ) -> Option<Program<'a>> {
-    todo!()
-    // let functions = program
-    //     .functions
-    //     .into_iter()
-    //     .map(
-    //         |FunctionDef {
-    //              return_type,
-    //              ident,
-    //              params,
-    //              block,
-    //          }| {
-    //             Some(FunctionDef {
-    //                 return_type,
-    //                 ident,
-    //                 params,
-    //                 block: map_number_block(errors, block)?,
-    //             })
-    //         },
-    //     )
-    //     .collect::<Option<_>>()?;
+    let defs = program
+        .defs
+        .into_iter()
+        .map(|def| match def {
+            TopLevelDef::Function(FunctionDef {
+                return_type,
+                ident,
+                params,
+                block,
+            }) => Some(TopLevelDef::Function(FunctionDef {
+                return_type,
+                ident,
+                params,
+                block: map_number_block(errors, block)?,
+            })),
+            TopLevelDef::Struct(def) => Some(TopLevelDef::Struct(def)),
+        })
+        .collect::<Option<_>>()?;
 
-    // Some(Program { functions })
+    Some(Program { defs })
 }
 
 fn map_number_block<'a>(
@@ -70,21 +68,16 @@ fn map_number_statement<'a>(
             ident,
             value: Some(map_num_expr(errors, expr)?),
         },
-        Statement::Assignment { lvalue, op, value } => Statement::Assignment {
-            lvalue: todo!(),
-            op,
-            value: map_num_expr(errors, value)?,
+        Statement::Assignment { lvalue, op, value } => {
+            let lvalue = map_lvalue(errors, lvalue);
+            let value = map_num_expr(errors, value);
+            Statement::Assignment {
+                    lvalue: lvalue?,
+                    op,
+                    value: value?,
+                }
         },
-        Statement::FunctionCall(_) => todo!(),
-        // Statement::FunctionCall(FunctionCall { ident, args }) => {
-        //     Statement::FunctionCall(FunctionCall {
-        //         ident,
-        //         args: args
-        //             .into_iter()
-        //             .map(|arg| map_num_expr(errors, arg))
-        //             .collect::<Option<_>>()?,
-        //     })
-        // }
+        Statement::FunctionCall(fn_call) => Statement::FunctionCall(map_fn_call(errors, fn_call)?),
         Statement::Return { value: expr } => Statement::Return {
             value: map_num_expr(errors, expr)?,
         },
@@ -170,17 +163,76 @@ fn map_num_expr<'a>(
                 b: Box::new(b?),
             })
         }
-        Expression::FunctionCall(_) => todo!(),
-        // Expression::FunctionCall(FunctionCall { ident, args }) => {
-        //     Some(Expression::FunctionCall(FunctionCall {
-        //         ident,
-        //         args: args
-        //             .into_iter()
-        //             .map(|arg| map_num_expr(errors, arg))
-        //             .collect::<Option<_>>()?,
-        //     }))
-        // }
-        _ => todo!()
+        Expression::Access { expr, ptr } => {
+            let expr = map_num_expr(errors, *expr);
+            let ptr = map_ptr(errors, ptr)?;
+
+            Some(Expression::Access {
+                expr: Box::new(expr?),
+                ptr,
+            })
+        }
+        Expression::FunctionCall(fn_call) => {
+            Some(Expression::FunctionCall(map_fn_call(errors, fn_call)?))
+        }
+    }
+}
+
+fn map_fn_call<'a>(
+    errors: &mut Vec<SemanticError<'a>>,
+    fn_call: FunctionCall<'a, ParseNum<'a>>,
+) -> Option<FunctionCall<'a>> {
+    match fn_call {
+        FunctionCall::Alloc { ty } => Some(FunctionCall::Alloc { ty }),
+        FunctionCall::AllocArray { ty, len } => {
+            let len = map_num_expr(errors, *len)?;
+
+            Some(FunctionCall::AllocArray {
+                ty,
+                len: Box::new(len),
+            })
+        }
+        FunctionCall::Fn { ident, args } => {
+            let args = args
+                .into_iter()
+                .map(|arg| map_num_expr(errors, arg))
+                .collect::<Option<_>>()?;
+
+            Some(FunctionCall::Fn { ident, args })
+        }
+    }
+}
+
+fn map_ptr<'a>(errors: &mut Vec<SemanticError<'a>>, ptr: Ptr<'a, ParseNum<'a>>) -> Option<Ptr<'a>> {
+    match ptr {
+        Ptr::FieldAccess { ident } => Some(Ptr::FieldAccess { ident }),
+        Ptr::PtrFieldAccess { ident } => Some(Ptr::PtrFieldAccess { ident }),
+        Ptr::PtrDeref => Some(Ptr::PtrDeref),
+        Ptr::ArrayAccess { index } => {
+            let index = map_num_expr(errors, *index)?;
+
+            Some(Ptr::ArrayAccess {
+                index: Box::new(index),
+            })
+        }
+    }
+}
+
+fn map_lvalue<'a>(
+    errors: &mut Vec<SemanticError<'a>>,
+    lvalue: Lvalue<'a, ParseNum<'a>>,
+) -> Option<Lvalue<'a>> {
+    match lvalue {
+        Lvalue::Ident(ident) => Some(Lvalue::Ident(ident)),
+        Lvalue::Ptr { lvalue, ptr } => {
+            let lvalue = map_lvalue(errors, *lvalue);
+            let ptr = map_ptr(errors, ptr);
+
+            Some(Lvalue::Ptr {
+                lvalue: Box::new(lvalue?),
+                ptr: ptr?,
+            })
+        }
     }
 }
 

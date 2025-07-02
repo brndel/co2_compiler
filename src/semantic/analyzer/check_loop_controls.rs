@@ -9,10 +9,9 @@ pub fn check_loop_controls<'a, Num>(
     errors: &mut Vec<SemanticError<'a>>,
     program: &Program<'a, Num>,
 ) {
-    todo!()
-    // for func in &program.functions {
-    //     validate_block(errors, &func.block, false);
-    // }
+    for func in program.functions() {
+        validate_block(errors, &func.block, false);
+    }
 }
 
 fn validate_block<'a, Num>(
