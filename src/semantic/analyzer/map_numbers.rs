@@ -184,13 +184,14 @@ fn map_fn_call<'a>(
     fn_call: FunctionCall<'a, ParseNum<'a>>,
 ) -> Option<FunctionCall<'a>> {
     match fn_call {
-        FunctionCall::Alloc { ty } => Some(FunctionCall::Alloc { ty }),
-        FunctionCall::AllocArray { ty, len } => {
+        FunctionCall::Alloc { ty, span } => Some(FunctionCall::Alloc { ty, span }),
+        FunctionCall::AllocArray { ty, len, span } => {
             let len = map_num_expr(errors, *len)?;
 
             Some(FunctionCall::AllocArray {
                 ty,
                 len: Box::new(len),
+                span
             })
         }
         FunctionCall::Fn { ident, args } => {

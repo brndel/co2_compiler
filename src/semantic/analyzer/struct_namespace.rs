@@ -3,7 +3,7 @@ use crate::{
     semantic::{SemanticError, namespace::StructNamespace},
 };
 
-pub fn check_struct_info<'src, Num>(
+pub fn get_struct_namespace<'src, Num>(
     errors: &mut Vec<SemanticError<'src>>,
     program: &Program<'src, Num>,
 ) -> StructNamespace<'src> {

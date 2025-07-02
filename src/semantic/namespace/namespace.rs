@@ -2,12 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, btree_map::Keys};
 
 use chumsky::span::SimpleSpan;
 
-use crate::{
-    core::Type,
-    lexer::Spanned,
-    semantic::SemanticError,
-};
-
+use crate::{core::Type, lexer::Spanned, semantic::SemanticError};
 
 pub struct Namespace<'src, 'parent, T = VariableStatus<'src>> {
     parent: Option<&'parent Self>,
@@ -83,19 +78,10 @@ impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus<'src>> {
         }
     }
 
-    pub fn assign(
-        &mut self,
-        ident: Spanned<&'src str>,
-        ty: Spanned<Type<'src>>,
-    ) -> Result<(), SemanticError<'src>> {
-        let var_ty;
-
+    pub fn assign(&mut self, ident: Spanned<&'src str>) -> Result<(), SemanticError<'src>> {
         if let Some(status) = self.variables.get_mut(ident.0) {
             status.is_assigned = true;
-            var_ty = status.ty.clone();
         } else if let Some(status) = self.get_var(ident.0) {
-            var_ty = status.ty.clone();
-
             if !status.is_assigned {
                 self.local_assigned_variables.insert(ident.0);
             }
@@ -103,14 +89,7 @@ impl<'src, 'parent> Namespace<'src, 'parent, VariableStatus<'src>> {
             return Err(SemanticError::NotDeclared { ident });
         }
 
-        if var_ty == ty.0 {
-            Ok(())
-        } else {
-            Err(SemanticError::MissmatchedType {
-                ty,
-                expected_type: var_ty,
-            })
-        }
+        Ok(())
     }
 
     pub fn assign_everything(&mut self) {

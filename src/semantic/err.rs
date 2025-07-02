@@ -7,6 +7,7 @@ use crate::{
     SourceFile,
     core::Type,
     lexer::{Keyword, Spanned},
+    parser::FunctionIdent,
 };
 
 #[derive(Debug)]
@@ -48,14 +49,14 @@ pub enum SemanticError<'a> {
         defined_at: SimpleSpan,
     },
     FunctionNotDefined {
-        call_ident: Spanned<&'a str>,
+        call_ident: Spanned<FunctionIdent<'a>>,
     },
     FunctionCallMissingArg {
-        call_ident: Spanned<&'a str>,
+        call_ident: Spanned<FunctionIdent<'a>>,
         arg_name: &'a str,
     },
     FunctionCallTooManyArgs {
-        call_ident: Spanned<&'a str>,
+        call_ident: Spanned<FunctionIdent<'a>>,
         arg_count: usize,
         expected_count: usize,
     },
@@ -68,6 +69,30 @@ pub enum SemanticError<'a> {
     },
     RecursiveStruct {
         ident: Spanned<&'a str>,
+    },
+    UnkownField {
+        struct_def: Spanned<&'a str>,
+        field: Spanned<&'a str>,
+    },
+    FieldAccessOnNonStruct {
+        ty: Spanned<Type<'a>>,
+        field: Spanned<&'a str>,
+    },
+    PtrFieldAccessOnNonPtr {
+        ty: Spanned<Type<'a>>,
+        field: Spanned<&'a str>,
+    },
+    ArrayAccessOnNonArray {
+        ty: Spanned<Type<'a>>,
+    },
+    PtrDerefOnNonPtr {
+        ty: Spanned<Type<'a>>,
+    },
+    NullPtrDeref {
+        span: SimpleSpan,
+    },
+    DisallowedBigType {
+        ty: Spanned<Type<'a>>,
     },
 }
 
@@ -110,6 +135,16 @@ impl<'a> SemanticError<'a> {
             SemanticError::MainFnWithParams { ident } => ident.1,
             SemanticError::UnknownStruct { ident } => ident.1,
             SemanticError::RecursiveStruct { ident } => ident.1,
+            SemanticError::UnkownField {
+                struct_def: _,
+                field,
+            } => field.1,
+            SemanticError::FieldAccessOnNonStruct { ty: _, field } => field.1,
+            SemanticError::PtrFieldAccessOnNonPtr { ty: _, field } => field.1,
+            SemanticError::ArrayAccessOnNonArray { ty } => ty.1,
+            SemanticError::PtrDerefOnNonPtr { ty } => ty.1,
+            SemanticError::NullPtrDeref { span } => *span,
+            SemanticError::DisallowedBigType { ty } => ty.1,
         }
     }
 
@@ -182,7 +217,34 @@ impl<'a> SemanticError<'a> {
             SemanticError::RecursiveStruct { ident } => {
                 format!("Recusive loop found in struct '{}'", ident.0)
             }
+            SemanticError::UnkownField { struct_def, field } => {
+                format!("Unkown field '{}' of struct '{}'", field.0, struct_def.0)
+            }
+            SemanticError::FieldAccessOnNonStruct { ty, field } => format!(
+                "Cannot access field '{}' of non-struct type '{}'",
+                field.0, ty.0
+            ),
+            SemanticError::PtrFieldAccessOnNonPtr { ty, field } => format!(
+                "Cannot access field '{}' of non-pointer-to-struct type '{}'",
+                field.0, ty.0
+            ),
+            SemanticError::ArrayAccessOnNonArray { ty } => {
+                format!("Cannot do array access on non-array type '{}'", ty.0)
+            }
+            SemanticError::PtrDerefOnNonPtr { ty } => {
+                format!("Cannot dereference non-pointer type '{}'", ty.0)
+            }
+            SemanticError::NullPtrDeref { span: _ } => {
+                format!("Cannot dereference NULL")
+            }
+            SemanticError::DisallowedBigType { ty } => {
+                format!("Big type '{}' not allowed here", ty.0)
+            }
         }
+    }
+
+    pub fn default_label(&self, source: SourceFile) -> Label<(String, Range<usize>)> {
+        Label::new(source.span(&self.span())).with_message(self.message())
     }
 
     pub fn labels(&self, source: SourceFile) -> Vec<Label<(String, Range<usize>)>> {
@@ -257,6 +319,19 @@ impl<'a> SemanticError<'a> {
             SemanticError::RecursiveStruct { ident } => {
                 vec![Label::new(source.span(&ident.1)).with_message(self.message())]
             }
+            SemanticError::UnkownField { struct_def, field } => {
+                vec![
+                    Label::new(source.span(&field.1)).with_message(self.message()),
+                    Label::new(source.span(&struct_def.1))
+                        .with_message(format!("Struct '{}' defined here", struct_def.0)),
+                ]
+            }
+            SemanticError::FieldAccessOnNonStruct { .. }
+            | SemanticError::PtrFieldAccessOnNonPtr { .. }
+            | SemanticError::ArrayAccessOnNonArray { .. }
+            | SemanticError::PtrDerefOnNonPtr { .. }
+            | SemanticError::NullPtrDeref { .. }
+            | SemanticError::DisallowedBigType { .. } => vec![self.default_label(source)],
         }
     }
 }

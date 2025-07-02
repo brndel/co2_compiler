@@ -1,11 +1,11 @@
-use std::{cmp::max, collections::BTreeMap, process::id};
+use std::{cmp::max, collections::BTreeMap};
 
 use chumsky::span::SimpleSpan;
 
 use crate::{
     core::Type,
     lexer::{GetSpan, Spanned},
-    program::{Program, StructDef, StructField},
+    program::{Program, StructDef},
     semantic::SemanticError,
     util::align_bytes,
 };
@@ -18,7 +18,8 @@ pub struct StructNamespace<'src, T = StructInfo<'src>> {
 #[derive(Debug, Clone)]
 pub struct StructInfo<'src> {
     pub size: StructSize,
-    pub offsets: BTreeMap<&'src str, StructFieldInfo<'src>>,
+    pub fields: BTreeMap<&'src str, StructFieldInfo<'src>>,
+    pub span: SimpleSpan,
 }
 
 #[derive(Debug, Clone)]
@@ -97,7 +98,10 @@ impl<'a, 'src> StructNamespace<'src, StructStatus<'a, 'src>> {
                 return Err(SemanticError::RecursiveStruct { ident });
             }
             Some(StructStatus::Error) => {
-                return Ok(StructSize { byte_count: 0, alignment: 0 });
+                return Ok(StructSize {
+                    byte_count: 0,
+                    alignment: 0,
+                });
             }
             Some(StructStatus::Info(info)) => return Ok(info.size),
         }
@@ -135,6 +139,7 @@ impl<'a, 'src> StructNamespace<'src, StructStatus<'a, 'src>> {
                     byte_count: 8,
                     alignment: 8,
                 },
+                Type::NullPtr => unreachable!("NullPtr can not be a field type"),
             };
 
             struct_size.byte_count = align_bytes(struct_size.byte_count, size.alignment);
@@ -158,7 +163,8 @@ impl<'a, 'src> StructNamespace<'src, StructStatus<'a, 'src>> {
 
         Ok(StructInfo {
             size: struct_size,
-            offsets,
+            fields: offsets,
+            span: def.ident.1,
         })
     }
 
@@ -166,6 +172,7 @@ impl<'a, 'src> StructNamespace<'src, StructStatus<'a, 'src>> {
         match &ty.0 {
             Type::Int => Ok(()),
             Type::Bool => Ok(()),
+            Type::NullPtr => Ok(()),
             Type::Struct(ident) => {
                 if self.structs.contains_key(ident) {
                     Ok(())
@@ -191,5 +198,25 @@ impl<'a, 'src> StructNamespace<'src, StructStatus<'a, 'src>> {
             .collect();
 
         StructNamespace { structs }
+    }
+}
+
+impl<'src> StructNamespace<'src> {
+    pub fn get_field_info(
+        &self,
+        struct_name: &'src str,
+        field: Spanned<&'src str>,
+    ) -> Result<Type<'src>, SemanticError<'src>> {
+        let struct_info = self.structs.get(struct_name).unwrap();
+
+        let field = struct_info
+            .fields
+            .get(field.0)
+            .ok_or(SemanticError::UnkownField {
+                struct_def: (struct_name, struct_info.span),
+                field,
+            })?;
+
+        Ok(field.ty.clone())
     }
 }

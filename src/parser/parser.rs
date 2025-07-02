@@ -507,19 +507,22 @@ where
         .map(|(ident, args)| FunctionCall::Fn { ident, args });
 
     let alloc_fn = just(Token::Keyword(Keyword::Alloc))
-        .ignore_then(ty_parser.clone().delimited_by_bracket(Paren))
-        .map(|ty| FunctionCall::Alloc { ty });
+        .to_span()
+        .then(ty_parser.clone().delimited_by_bracket(Paren))
+        .map(|(span, ty)| FunctionCall::Alloc { ty, span });
 
     let alloc_array_fn = just(Token::Keyword(Keyword::AllocArray))
-        .ignore_then(
+        .to_span()
+        .then(
             ty_parser
                 .then_ignore(just(Token::Separator(Separator::Comma)))
                 .then(expr_parser)
                 .delimited_by_bracket(Paren),
         )
-        .map(|(ty, len)| FunctionCall::AllocArray {
+        .map(|(span, (ty, len))| FunctionCall::AllocArray {
             ty,
             len: Box::new(len),
+            span,
         });
 
     normal_fn.or(alloc_fn).or(alloc_array_fn)

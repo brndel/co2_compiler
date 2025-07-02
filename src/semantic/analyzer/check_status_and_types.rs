@@ -3,32 +3,40 @@ use chumsky::span::Span;
 use crate::{
     core::Type,
     lexer::{BinaryOperator, GetSpan, Spanned, UnaryOperator},
-    parser::{Block, Expression, FunctionCall, Statement},
+    parser::{Block, Expression, FunctionCall, Lvalue, Ptr, Statement},
     program::{FunctionDef, Program},
-    semantic::{Namespace, SemanticError, namespace::FunctionNamespace},
+    semantic::{
+        Namespace, SemanticError,
+        namespace::{FunctionNamespace, StructNamespace},
+    },
 };
 
 pub fn check_status_and_types<'src, Num>(
     errors: &mut Vec<SemanticError<'src>>,
     program: &Program<'src, Num>,
+    functions: &FunctionNamespace<'src>,
+    structs: &StructNamespace<'src>,
 ) where
     Num: GetSpan,
 {
-    let functions = FunctionNamespace::new(program, errors);
+    for func in program.functions() {
+        let mut namespace = Namespace::new();
 
-    todo!()
+        for param in &func.params {
+            if let Err(err) = namespace.declare(param.name, param.ty.0.clone(), true) {
+                errors.push(err);
+            }
+        }
 
-    // for func in &program.functions {
-    //     let mut namespace = Namespace::new();
-
-    //     for param in &func.params {
-    //         if let Err(err) = namespace.declare(param.name, param.ty.0, true) {
-    //             errors.push(err);
-    //         }
-    //     }
-
-    //     validate_block(errors, &func.block, Some(&namespace), &functions, func);
-    // }
+        validate_block(
+            errors,
+            &func.block,
+            Some(&namespace),
+            &functions,
+            func,
+            structs,
+        );
+    }
 }
 
 fn validate_block<'src, 'ns, 'program, Num>(
@@ -37,6 +45,7 @@ fn validate_block<'src, 'ns, 'program, Num>(
     namespace: Option<&'ns Namespace<'src, '_>>,
     functions: &FunctionNamespace<'src>,
     current_function: &FunctionDef<'src, Num>,
+    structs: &StructNamespace<'src>,
 ) -> Namespace<'src, 'ns>
 where
     Num: GetSpan,
@@ -50,6 +59,7 @@ where
             &mut namespace,
             functions,
             current_function,
+            structs,
         )
     }
 
@@ -62,14 +72,22 @@ fn validate_statement<'src, Num>(
     namespace: &mut Namespace<'src, '_>,
     functions: &FunctionNamespace<'src>,
     current_function: &FunctionDef<'src, Num>,
+    structs: &StructNamespace<'src>,
 ) where
     Num: GetSpan,
 {
     match statement {
         Statement::Declaration { ty, ident, value } => {
+            if ty.0.is_big_type() {
+                errors.push(SemanticError::DisallowedBigType { ty: ty.clone() });
+                return;
+            }
+
             if let Some(value) = value {
-                if let Some(value_ty) = validate_expression(errors, value, &namespace, functions) {
-                    if value_ty.0 != ty.0 {
+                if let Some(value_ty) =
+                    validate_expression(errors, value, &namespace, functions, structs)
+                {
+                    if !ty.0.can_assign(&value_ty.0) {
                         errors.push(SemanticError::MissmatchedType {
                             ty: value_ty,
                             expected_type: ty.0.clone(),
@@ -83,39 +101,48 @@ fn validate_statement<'src, Num>(
             }
         }
         Statement::Assignment { lvalue, op, value } => {
-            todo!()
-            // let Some(value_ty) = validate_expression(errors, value, &namespace, functions) else {
-            //     return;
-            // };
+            let value_ty = validate_expression(errors, value, &namespace, functions, structs);
 
-            // let var_ty = match namespace.get_type(*ident) {
-            //     Ok(var_ty) => var_ty,
-            //     Err(err) => {
-            //         errors.push(err);
-            //         return;
-            //     }
-            // };
+            let lvalue_ty = validate_lvalue(errors, lvalue, &namespace, functions, structs);
 
-            // if op.is_some() {
-            //     if let Err(err) = namespace.is_assigned(*ident) {
-            //         errors.push(err);
-            //     }
+            let (Some(value_ty), Some(lvalue_ty)) = (value_ty, lvalue_ty) else {
+                return;
+            };
 
-            //     check_binary_type(
-            //         errors,
-            //         (var_ty, ident.1),
-            //         value_ty.clone(),
-            //         Some(Type::Int),
-            //         Type::Int,
-            //     );
-            // }
+            let ident = lvalue.ident();
 
-            // if let Err(err) = namespace.assign(*ident, value_ty.clone()) {
-            //     errors.push(err);
-            // }
+            if lvalue_ty.0.is_big_type() {
+                errors.push(SemanticError::DisallowedBigType { ty: lvalue_ty });
+                return;
+            }
+
+            if op.is_some() {
+                if let Err(err) = namespace.is_assigned(ident) {
+                    errors.push(err);
+                }
+
+                check_binary_type(
+                    errors,
+                    lvalue_ty,
+                    value_ty.clone(),
+                    Some(Type::Int),
+                    Type::Int,
+                );
+            } else {
+                if !lvalue_ty.0.can_assign(&value_ty.0) {
+                    errors.push(SemanticError::MissmatchedType {
+                        ty: value_ty.clone(),
+                        expected_type: lvalue_ty.0,
+                    });
+                }
+            }
+
+            if let Err(err) = namespace.assign(ident) {
+                errors.push(err);
+            }
         }
         Statement::FunctionCall(fn_call) => {
-            validate_function_call(errors, fn_call, namespace, functions);
+            validate_function_call(errors, fn_call, namespace, functions, structs);
         }
         Statement::If {
             condition,
@@ -123,7 +150,7 @@ fn validate_statement<'src, Num>(
             r#else,
         } => {
             if let Some(condition_ty) =
-                validate_expression(errors, condition, &namespace, functions)
+                validate_expression(errors, condition, &namespace, functions, structs)
             {
                 if condition_ty.0 != Type::Bool {
                     errors.push(SemanticError::MissmatchedType {
@@ -140,6 +167,7 @@ fn validate_statement<'src, Num>(
                 &mut then_namespace,
                 functions,
                 current_function,
+                structs,
             );
 
             if let Some(r#else) = r#else {
@@ -150,6 +178,7 @@ fn validate_statement<'src, Num>(
                     &mut else_namespace,
                     functions,
                     current_function,
+                    structs,
                 );
 
                 let then_vars = then_namespace.into_local_assigned_variables();
@@ -165,7 +194,7 @@ fn validate_statement<'src, Num>(
             body: then,
         } => {
             if let Some(condition_ty) =
-                validate_expression(errors, condition, &namespace, functions)
+                validate_expression(errors, condition, &namespace, functions, structs)
             {
                 if condition_ty.0 != Type::Bool {
                     errors.push(SemanticError::MissmatchedType {
@@ -176,7 +205,14 @@ fn validate_statement<'src, Num>(
             };
 
             let mut inner = Namespace::with_parent(Some(namespace));
-            validate_statement(errors, then, &mut inner, functions, current_function);
+            validate_statement(
+                errors,
+                then,
+                &mut inner,
+                functions,
+                current_function,
+                structs,
+            );
         }
         Statement::For {
             init,
@@ -194,14 +230,22 @@ fn validate_statement<'src, Num>(
                     &mut loop_namespace,
                     functions,
                     current_function,
+                    structs,
                 );
                 let local_vars = loop_namespace.local_assigned_variables().clone();
                 init_vars = Some(local_vars);
             }
-            validate_expression(errors, condition, &mut loop_namespace, functions);
+            validate_expression(errors, condition, &mut loop_namespace, functions, structs);
 
             let mut inner = loop_namespace.new_child();
-            validate_statement(errors, &then, &mut inner, functions, current_function);
+            validate_statement(
+                errors,
+                &then,
+                &mut inner,
+                functions,
+                current_function,
+                structs,
+            );
             loop_namespace.assign_variable_set(inner.local_assigned_variables().clone());
 
             if let Some(step) = step {
@@ -211,6 +255,7 @@ fn validate_statement<'src, Num>(
                     &mut loop_namespace,
                     functions,
                     current_function,
+                    structs,
                 );
             }
 
@@ -219,7 +264,8 @@ fn validate_statement<'src, Num>(
             }
         }
         Statement::Return { value: expr } => {
-            if let Some(expr_ty) = validate_expression(errors, expr, &namespace, functions) {
+            if let Some(expr_ty) = validate_expression(errors, expr, &namespace, functions, structs)
+            {
                 let return_ty = current_function.return_type.0.clone();
                 if expr_ty.0 != return_ty {
                     errors.push(SemanticError::MissmatchedType {
@@ -232,11 +278,44 @@ fn validate_statement<'src, Num>(
         }
         Statement::Break(_) | Statement::Continue(_) => namespace.assign_everything(),
         Statement::Block(block) => {
-            let inner = validate_block(errors, block, Some(namespace), functions, current_function);
+            let inner = validate_block(
+                errors,
+                block,
+                Some(namespace),
+                functions,
+                current_function,
+                structs,
+            );
 
             let assigned_vars = inner.into_local_assigned_variables();
 
             namespace.assign_variable_set(assigned_vars);
+        }
+    }
+}
+
+fn validate_lvalue<'src, Num>(
+    errors: &mut Vec<SemanticError<'src>>,
+    lvalue: &Lvalue<'src, Num>,
+    namespace: &Namespace<'src, '_>,
+    functions: &FunctionNamespace<'src>,
+    structs: &StructNamespace<'src>,
+) -> Option<Spanned<Type<'src>>>
+where
+    Num: GetSpan,
+{
+    match lvalue {
+        Lvalue::Ident(ident) => match namespace.get_type(*ident) {
+            Ok(lvalue) => Some((lvalue, ident.1)),
+            Err(err) => {
+                errors.push(err);
+                None
+            }
+        },
+        Lvalue::Ptr { lvalue, ptr } => {
+            let ty = validate_lvalue(errors, &lvalue, namespace, functions, structs)?;
+
+            validate_ptr(errors, namespace, functions, structs, ptr, ty)
         }
     }
 }
@@ -246,6 +325,7 @@ fn validate_expression<'src, Num>(
     expression: &Expression<'src, Num>,
     namespace: &Namespace<'src, '_>,
     functions: &FunctionNamespace<'src>,
+    structs: &StructNamespace<'src>,
 ) -> Option<Spanned<Type<'src>>>
 where
     Num: GetSpan,
@@ -269,8 +349,8 @@ where
         Expression::Num(value) => Some((Type::Int, value.span())),
         Expression::Bool(value) => Some((Type::Bool, value.span())),
         Expression::Binary { a, op, b } => {
-            let a_ty = validate_expression(errors, &a, namespace, functions);
-            let b_ty = validate_expression(errors, &b, namespace, functions);
+            let a_ty = validate_expression(errors, &a, namespace, functions, structs);
+            let b_ty = validate_expression(errors, &b, namespace, functions, structs);
 
             let a = a_ty?;
             let b = b_ty?;
@@ -303,7 +383,7 @@ where
             }
         }
         Expression::Unary { op, expr } => {
-            let ty = validate_expression(errors, expr, namespace, functions)?;
+            let ty = validate_expression(errors, expr, namespace, functions, structs)?;
             match op.0 {
                 UnaryOperator::Minus | UnaryOperator::BitNot => {
                     if ty.0 == Type::Int {
@@ -330,9 +410,10 @@ where
             }
         }
         Expression::Ternary { condition, a, b } => {
-            let condition_ty = validate_expression(errors, condition, namespace, functions);
-            let a_ty = validate_expression(errors, a, namespace, functions);
-            let b_ty = validate_expression(errors, b, namespace, functions);
+            let condition_ty =
+                validate_expression(errors, condition, namespace, functions, structs);
+            let a_ty = validate_expression(errors, a, namespace, functions, structs);
+            let b_ty = validate_expression(errors, b, namespace, functions, structs);
 
             let condition = condition_ty?;
             let a = a_ty?;
@@ -352,9 +433,94 @@ where
             }
         }
         Expression::FunctionCall(fn_call) => {
-            validate_function_call(errors, fn_call, namespace, functions)
+            validate_function_call(errors, fn_call, namespace, functions, structs)
         }
-        _ => todo!()
+        Expression::NullPtr(simple_span) => Some((Type::NullPtr, *simple_span)),
+        Expression::Access { expr, ptr } => {
+            let ty = validate_expression(errors, &expr, namespace, functions, structs)?;
+
+            validate_ptr(errors, namespace, functions, structs, ptr, ty)
+        }
+    }
+}
+
+fn validate_ptr<'src, Num>(
+    errors: &mut Vec<SemanticError<'src>>,
+    namespace: &Namespace<'src, '_>,
+    functions: &FunctionNamespace<'src>,
+    structs: &StructNamespace<'src>,
+    ptr: &Ptr<'src, Num>,
+    ty: Spanned<Type<'src>>,
+) -> Option<Spanned<Type<'src>>>
+where
+    Num: GetSpan,
+{
+    match (ptr, &ty.0) {
+        (Ptr::FieldAccess { ident }, Type::Struct(struct_name)) => {
+            let field_ty = match structs.get_field_info(struct_name, *ident) {
+                Ok(ty) => ty,
+                Err(err) => {
+                    errors.push(err);
+                    return None;
+                }
+            };
+
+            return Some((field_ty, ident.1));
+        }
+        (Ptr::FieldAccess { ident }, _) => {
+            errors.push(SemanticError::FieldAccessOnNonStruct { ty, field: *ident });
+            return None;
+        }
+        (Ptr::PtrFieldAccess { ident }, Type::Pointer(inner_ty)) => {
+            if let Type::Struct(struct_name) = inner_ty.as_ref() {
+                let field_ty = match structs.get_field_info(struct_name, *ident) {
+                    Ok(ty) => ty,
+                    Err(err) => {
+                        errors.push(err);
+                        return None;
+                    }
+                };
+
+                Some((field_ty, ident.1))
+            } else {
+                errors.push(SemanticError::PtrFieldAccessOnNonPtr { ty, field: *ident });
+                None
+            }
+        }
+        (Ptr::PtrFieldAccess { ident }, Type::NullPtr) => {
+            errors.push(SemanticError::NullPtrDeref { span: ident.1 });
+            None
+        }
+        (Ptr::PtrFieldAccess { ident }, _) => {
+            errors.push(SemanticError::PtrFieldAccessOnNonPtr { ty, field: *ident });
+            None
+        }
+        (Ptr::ArrayAccess { index }, Type::Array(inner_ty)) => {
+            let index_ty = validate_expression(errors, &index, namespace, functions, structs)?;
+
+            if index_ty.0 == Type::Int {
+                Some((inner_ty.as_ref().to_owned(), ty.1))
+            } else {
+                errors.push(SemanticError::MissmatchedType {
+                    ty: index_ty,
+                    expected_type: Type::Int,
+                });
+                None
+            }
+        }
+        (Ptr::ArrayAccess { .. }, _) => {
+            errors.push(SemanticError::ArrayAccessOnNonArray { ty });
+            None
+        }
+        (Ptr::PtrDeref, Type::Pointer(inner_ty)) => Some((inner_ty.as_ref().clone(), ty.1)),
+        (Ptr::PtrDeref, Type::NullPtr) => {
+            errors.push(SemanticError::NullPtrDeref { span: ty.1 });
+            None
+        }
+        (Ptr::PtrDeref, _) => {
+            errors.push(SemanticError::PtrDerefOnNonPtr { ty });
+            None
+        }
     }
 }
 
@@ -399,42 +565,74 @@ fn validate_function_call<'src, Num: GetSpan>(
     fn_call: &FunctionCall<'src, Num>,
     namespace: &Namespace<'src, '_>,
     functions: &FunctionNamespace<'src>,
+    structs: &StructNamespace<'src>,
 ) -> Option<Spanned<Type<'src>>> {
-    todo!()
-    // let func = match functions.get_function(fn_call) {
-    //     Ok(func) => func,
-    //     Err(err) => {
-    //         errors.push(err);
-    //         return None;
-    //     }
-    // };
+    let func = match functions.get_function(fn_call) {
+        Ok(func) => func,
+        Err(err) => {
+            errors.push(err);
+            return None;
+        }
+    };
+    let ident = fn_call.ident();
 
-    // for (index, param) in func.params().iter().enumerate() {
-    //     let arg = match fn_call.args.get(index) {
-    //         Some(arg) => arg,
-    //         None => {
-    //             errors.push(SemanticError::FunctionCallMissingArg {
-    //                 call_ident: fn_call.ident,
-    //                 arg_name: param.name.0,
-    //             });
-    //             continue;
-    //         }
-    //     };
+    match fn_call {
+        FunctionCall::Alloc { .. } => {
+            return Some((func.return_type(), ident.span()));
+        }
+        FunctionCall::AllocArray { len, .. } => {
+            let len = validate_expression(errors, &len, namespace, functions, structs);
 
-    //     let ty = match validate_expression(errors, arg, namespace, functions) {
-    //         Some(ty) => ty,
-    //         None => continue,
-    //     };
+            let Some(len) = len else {
+                return Some((func.return_type(), ident.span()));
+            };
 
-    //     if ty.0 != param.ty.0 {
-    //         errors.push(SemanticError::MissmatchedType { ty, expected_type: param.ty.0 });
-    //     }
-    // }
+            if len.0 != Type::Int {
+                errors.push(SemanticError::MissmatchedType {
+                    ty: len,
+                    expected_type: Type::Int,
+                });
+                return Some((func.return_type(), ident.span()));
+            }
 
-    // if fn_call.args.len() > func.params().len()  {
-    //     errors.push(SemanticError::FunctionCallTooManyArgs { call_ident: fn_call.ident, arg_count: fn_call.args.len(), expected_count: func.params().len() });
-    //     return None;
-    // }
+            return Some((func.return_type(), ident.span()));
+        }
+        FunctionCall::Fn { ident, args } => {
+            for (index, param) in func.params().iter().enumerate() {
+                let arg = match args.get(index) {
+                    Some(arg) => arg,
+                    None => {
+                        errors.push(SemanticError::FunctionCallMissingArg {
+                            call_ident: *ident,
+                            arg_name: param.name.0,
+                        });
+                        continue;
+                    }
+                };
 
-    // Some((func.return_type(), fn_call.ident.span()))
+                let ty = match validate_expression(errors, arg, namespace, functions, structs) {
+                    Some(ty) => ty,
+                    None => continue,
+                };
+
+                if ty.0 != param.ty.0 {
+                    errors.push(SemanticError::MissmatchedType {
+                        ty,
+                        expected_type: param.ty.0.clone(),
+                    });
+                }
+            }
+
+            if args.len() > func.params().len() {
+                errors.push(SemanticError::FunctionCallTooManyArgs {
+                    call_ident: *ident,
+                    arg_count: args.len(),
+                    expected_count: func.params().len(),
+                });
+                return None;
+            }
+        }
+    }
+
+    Some((func.return_type(), ident.span()))
 }

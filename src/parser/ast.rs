@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Display};
+
 use chumsky::span::SimpleSpan;
 
 use crate::{
@@ -46,22 +48,32 @@ pub enum Statement<'a, Num = ValueNum> {
     Block(Block<'a, Num>),
 }
 
-
 #[derive(Debug, Clone)]
 pub enum Lvalue<'a, Num = ValueNum> {
     Ident(Spanned<&'a str>),
     Ptr {
         lvalue: Box<Self>,
-        ptr: Ptr<'a, Num>
+        ptr: Ptr<'a, Num>,
+    },
+}
+
+impl<'a, Num> Lvalue<'a, Num> {
+    pub fn ident(&self) -> Spanned<&'a str> {
+        match self {
+            Lvalue::Ident(ident) => *ident,
+            Lvalue::Ptr { lvalue, .. } => lvalue.ident(),
+        }
     }
 }
 
-impl<'a, Num> From<(Lvalue<'a, Num>, Ptr<'a, Num>)> for Lvalue<'a, Num> {
+impl<'a, Num: Debug> From<(Lvalue<'a, Num>, Ptr<'a, Num>)> for Lvalue<'a, Num> {
     fn from(value: (Lvalue<'a, Num>, Ptr<'a, Num>)) -> Self {
-        Self::Ptr { lvalue: Box::new(value.0), ptr: value.1 }
+        Self::Ptr {
+            lvalue: Box::new(value.0),
+            ptr: value.1,
+        }
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub enum Expression<'a, Num = ValueNum> {
@@ -86,13 +98,16 @@ pub enum Expression<'a, Num = ValueNum> {
     FunctionCall(FunctionCall<'a, Num>),
     Access {
         expr: Box<Self>,
-        ptr: Ptr<'a, Num>
+        ptr: Ptr<'a, Num>,
     },
 }
 
 impl<'a, Num> From<(Expression<'a, Num>, Ptr<'a, Num>)> for Expression<'a, Num> {
     fn from(value: (Expression<'a, Num>, Ptr<'a, Num>)) -> Self {
-        Self::Access { expr: Box::new(value.0), ptr: value.1 }
+        Self::Access {
+            expr: Box::new(value.0),
+            ptr: value.1,
+        }
     }
 }
 
@@ -112,10 +127,12 @@ pub enum Ptr<'a, Num = ValueNum> {
 pub enum FunctionCall<'a, Num = ValueNum> {
     Alloc {
         ty: Spanned<Type<'a>>,
+        span: SimpleSpan,
     },
     AllocArray {
         ty: Spanned<Type<'a>>,
         len: Box<Expression<'a, Num>>,
+        span: SimpleSpan,
     },
     Fn {
         ident: Spanned<FunctionIdent<'a>>,
@@ -123,12 +140,48 @@ pub enum FunctionCall<'a, Num = ValueNum> {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum FunctionIdent<'a> {
     User(&'a str),
     Print,
     Read,
     Flush,
+}
+
+impl<'a> AsRef<str> for FunctionIdent<'a> {
+    fn as_ref(&self) -> &str {
+        self.ident()
+    }
+}
+
+impl<'a> Display for FunctionIdent<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
+}
+
+impl<'a, Num> FunctionCall<'a, Num> {
+    pub fn ident(&self) -> Spanned<&'a str> {
+        match self {
+            FunctionCall::Alloc { span, .. } => ("alloc", *span),
+            FunctionCall::AllocArray { span, .. } => ("alloc_array", *span),
+            FunctionCall::Fn {
+                ident: (ident, span),
+                ..
+            } => (ident.ident(), *span),
+        }
+    }
+}
+
+impl<'a> FunctionIdent<'a> {
+    pub fn ident(&self) -> &'a str {
+        match self {
+            FunctionIdent::User(ident) => ident,
+            FunctionIdent::Print => "print",
+            FunctionIdent::Read => "read",
+            FunctionIdent::Flush => "flush",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
