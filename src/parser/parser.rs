@@ -276,6 +276,7 @@ where
             Token::HexNum(num) = e => Expression::Num(ParseNum::Hex((num, e.span()))),
             Token::Keyword(Keyword::True) = e => Expression::Bool((true, e.span())),
             Token::Keyword(Keyword::False) = e => Expression::Bool((false, e.span())),
+            Token::Keyword(Keyword::Null) = e => Expression::NullPtr(e.span()),
         }
         .labelled("value")
         .as_context();

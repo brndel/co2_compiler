@@ -68,6 +68,7 @@ pub enum Expression<'a, Num = ValueNum> {
     Ident(Spanned<&'a str>),
     Num(Num),
     Bool(Spanned<bool>),
+    NullPtr(SimpleSpan),
     Binary {
         a: Box<Self>,
         op: Spanned<BinaryOperator>,

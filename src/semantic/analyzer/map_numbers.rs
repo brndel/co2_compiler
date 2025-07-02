@@ -152,6 +152,7 @@ fn map_num_expr<'a>(
         }
         Expression::Ident(ident) => Some(Expression::Ident(ident)),
         Expression::Bool(value) => Some(Expression::Bool(value)),
+        Expression::NullPtr(span) => Some(Expression::NullPtr(span)),
         Expression::Ternary { condition, a, b } => {
             let condition = map_num_expr(errors, *condition);
             let a = map_num_expr(errors, *a);
