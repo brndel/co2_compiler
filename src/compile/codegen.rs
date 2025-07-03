@@ -2,14 +2,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     compile::{
-        instruction::{BuiltinFuntion, FunctionPointer},
-        value::Value,
+        instruction::{BuiltinFuntion, FunctionPointer}, register::Register64, value::{Value, Value64}
     },
     lexer::{BinaryOperator, UnaryOperator},
-    ssa::{
-        BasicBlockEnd, BlockLabel, FunctionIrGraph, SsaInstruction, SsaValue,
-        VirtualRegister,
-    },
+    parser::FunctionIdent,
+    semantic::StructNamespace,
+    ssa::{BasicBlockEnd, BlockLabel, FunctionIrGraph, SsaInstruction, SsaValue, VirtualRegister},
 };
 
 use super::{
@@ -22,6 +20,7 @@ pub fn generate_asm<'a>(
     registers: &BTreeMap<VirtualRegister, Register>,
     visited_blocks: &BTreeSet<BlockLabel<'a>>,
     func_labels: &BTreeMap<&'a str, BlockLabel<'a>>,
+    structs: &StructNamespace<'a>,
 ) -> Vec<Instruction<'a>> {
     let mut instructions = Vec::new();
 
@@ -201,16 +200,80 @@ pub fn generate_asm<'a>(
                         .into_iter()
                         .map(|arg| transform_value(arg, registers))
                         .collect();
-                    let func = match *name {
-                        "print" => FunctionPointer::Builtin(BuiltinFuntion::Print),
-                        "read" => FunctionPointer::Builtin(BuiltinFuntion::Read),
-                        "flush" => FunctionPointer::Builtin(BuiltinFuntion::Flush),
-                        _ => FunctionPointer::User {
+                    let func = match name {
+                        FunctionIdent::Print => FunctionPointer::Builtin(BuiltinFuntion::Print),
+                        FunctionIdent::Read => FunctionPointer::Builtin(BuiltinFuntion::Read),
+                        FunctionIdent::Flush => FunctionPointer::Builtin(BuiltinFuntion::Flush),
+                        FunctionIdent::User(name) => FunctionPointer::User {
                             label: func_labels[name],
                         },
                     };
                     instructions.push(Instruction::CallFunction { dst, func, params });
                 }
+                SsaInstruction::Allocate {
+                    target,
+                    ty,
+                    array_len,
+                } => {
+                    let size = structs.get_size(ty);
+
+                    let dst = target.map(|target| registers[&target]);
+                    let array_len = array_len.map(|value| transform_value(&value, registers));
+
+                    instructions.push(Instruction::Alloc {
+                        byte_count: size.byte_count,
+                        dst,
+                        array_len,
+                    });
+                }
+                SsaInstruction::MemGet {
+                    target,
+                    source_ptr,
+                    offset,
+                    field_size
+                } => {
+                    let target = registers[target];
+                    let source_ptr = transform_value(source_ptr, registers);
+                    instructions.push(Instruction::MemGet {
+                        target,
+                        source_ptr,
+                        offset: *offset,
+                        field_size: *field_size
+                    });
+                }
+                SsaInstruction::MemSet {
+                    target_ptr,
+                    source,
+                    offset,
+                    field_size
+                } => {
+                    let target_ptr = registers[target_ptr];
+                    let source = transform_value(source, registers);
+                    instructions.push(Instruction::MemSet {
+                        target_ptr,
+                        source,
+                        offset: *offset,
+                        field_size: *field_size
+                    });
+                }
+                SsaInstruction::CalcArrayPtr {
+                    target,
+                    ptr,
+                    index,
+                    struct_size,
+                } => {
+                    let array_ptr = transform_value(ptr, registers);
+                    let index = transform_value(index, registers);
+                    instructions.push(Instruction::CheckArrayLen { array_ptr, index });
+
+                    instructions.push(Instruction::Move { src: index, dst: Register::Temp });
+                    instructions.push(Instruction::Mul { reg: Register::Temp, value: Value::Immediate(*struct_size as i32) });
+                    instructions.push(Instruction::Add64 { reg: Register64::Temp, value: Value64::Immediate(*struct_size as i32) });
+
+                    let target = registers[target];
+                    instructions.push(Instruction::Move64 { src: Value64::Register(Register64::Temp), dst: target.into() });
+
+                },
                 SsaInstruction::FunctionArg { .. } => (),
             }
         }

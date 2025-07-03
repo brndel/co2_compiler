@@ -1,6 +1,10 @@
 use std::fmt::Display;
 
-use crate::lexer::{BinaryOperator, UnaryOperator};
+use crate::{
+    core::Type,
+    lexer::{BinaryOperator, UnaryOperator},
+    parser::FunctionIdent,
+};
 
 use super::register::VirtualRegister;
 
@@ -31,9 +35,32 @@ pub enum SsaInstruction<'a> {
     },
     FunctionCall {
         target: Option<VirtualRegister<'a>>,
-        name: &'a str,
+        name: FunctionIdent<'a>,
         args: Vec<SsaValue<'a>>,
-    }
+    },
+    Allocate {
+        target: Option<VirtualRegister<'a>>,
+        ty: Type<'a>,
+        array_len: Option<SsaValue<'a>>,
+    },
+    MemGet {
+        target: VirtualRegister<'a>,
+        source_ptr: SsaValue<'a>,
+        offset: usize,
+        field_size: usize
+    },
+    MemSet {
+        target_ptr: VirtualRegister<'a>,
+        source: SsaValue<'a>,
+        offset: usize,
+        field_size: usize
+    },
+    CalcArrayPtr {
+        target: VirtualRegister<'a>,
+        ptr: SsaValue<'a>,
+        index: SsaValue<'a>,
+        struct_size: usize,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -80,6 +107,53 @@ impl<'a> Display for SsaInstruction<'a> {
                 }
                 write!(f, ")")
             }
+            SsaInstruction::Allocate {
+                target,
+                ty,
+                array_len,
+            } => {
+                if let Some(target) = target {
+                    write!(f, "{} = ", target)?;
+                }
+
+                if let Some(arra_len) = array_len {
+                    write!(f, "alloc_array({}, {})", ty, arra_len)
+                } else {
+                    write!(f, "alloc({})", ty)
+                }
+            }
+            SsaInstruction::MemGet {
+                target,
+                source_ptr: ptr,
+                offset,
+                field_size: _,
+            } => {
+                if *offset == 0 {
+                    write!(f, "{} = *{}", target, ptr)
+                } else {
+                    write!(f, "{} = *({:+}){}", target, offset, ptr)
+                }
+            }
+            SsaInstruction::MemSet {
+                target_ptr: target,
+                source: ptr,
+                offset,
+                field_size: _,
+            } => {
+                if *offset == 0 {
+                    write!(f, "*{} = {}", target, ptr)
+                } else {
+                    write!(f, "*({:+}){} = {}", offset, target, ptr)
+                }
+            }
+            SsaInstruction::CalcArrayPtr {
+                target,
+                ptr,
+                index,
+                struct_size,
+            } => {
+                write!(f, "{} = {} + [{} * {}]", target, ptr, index, struct_size)
+            }
         }
     }
 }
@@ -93,6 +167,10 @@ impl<'a> SsaInstruction<'a> {
             SsaInstruction::UnaryOp { target, .. } => Some(target),
             SsaInstruction::FunctionArg { target, .. } => Some(target),
             SsaInstruction::FunctionCall { target, .. } => target.as_ref(),
+            SsaInstruction::Allocate { target, .. } => target.as_ref(),
+            SsaInstruction::MemGet { target, .. } => Some(target),
+            SsaInstruction::MemSet { target_ptr: target, .. } => Some(target),
+            SsaInstruction::CalcArrayPtr { target, .. } => Some(target),
         }
     }
 }

@@ -6,7 +6,7 @@ use crate::{
     parser::{Block, Expression, FunctionCall, Lvalue, Ptr, Statement},
     program::{FunctionDef, Program},
     semantic::{
-        Namespace, SemanticError,
+        Namespace, SemanticError, StructFieldInfo,
         namespace::{FunctionNamespace, StructNamespace},
     },
 };
@@ -312,10 +312,18 @@ where
                 None
             }
         },
-        Lvalue::Ptr { lvalue, ptr } => {
+        Lvalue::Ptr {
+            lvalue,
+            ptr,
+            size_hint,
+        } => {
             let ty = validate_lvalue(errors, &lvalue, namespace, functions, structs)?;
 
-            validate_ptr(errors, namespace, functions, structs, ptr, ty)
+            let (return_ty, hint) = validate_ptr(errors, namespace, functions, structs, ptr, ty)?;
+
+            *size_hint.borrow_mut() = Some(hint);
+
+            Some(return_ty)
         }
     }
 }
@@ -436,10 +444,33 @@ where
             validate_function_call(errors, fn_call, namespace, functions, structs)
         }
         Expression::NullPtr(simple_span) => Some((Type::NullPtr, *simple_span)),
-        Expression::Access { expr, ptr } => {
+        Expression::Access {
+            expr,
+            ptr,
+            size_hint,
+        } => {
             let ty = validate_expression(errors, &expr, namespace, functions, structs)?;
 
-            validate_ptr(errors, namespace, functions, structs, ptr, ty)
+            let (return_ty, hint) = validate_ptr(errors, namespace, functions, structs, ptr, ty)?;
+
+            *size_hint.borrow_mut() = Some(hint);
+
+            Some(return_ty)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SizeHint {
+    pub offset: usize,
+    pub size: usize,
+}
+
+impl SizeHint {
+    pub fn new(info: &StructFieldInfo, structs: &StructNamespace) -> Self {
+        SizeHint {
+            offset: info.offset,
+            size: structs.get_size(&info.ty).byte_count,
         }
     }
 }
@@ -451,13 +482,13 @@ fn validate_ptr<'src, Num>(
     structs: &StructNamespace<'src>,
     ptr: &Ptr<'src, Num>,
     ty: Spanned<Type<'src>>,
-) -> Option<Spanned<Type<'src>>>
+) -> Option<(Spanned<Type<'src>>, SizeHint)>
 where
     Num: GetSpan,
 {
     match (ptr, &ty.0) {
         (Ptr::FieldAccess { ident }, Type::Struct(struct_name)) => {
-            let field_ty = match structs.get_field_info(struct_name, *ident) {
+            let info = match structs.get_field_info(struct_name, *ident) {
                 Ok(ty) => ty,
                 Err(err) => {
                     errors.push(err);
@@ -465,7 +496,8 @@ where
                 }
             };
 
-            return Some((field_ty, ident.1));
+            let size_hint = SizeHint::new(&info, structs);
+            return Some(((info.ty, ident.1), size_hint));
         }
         (Ptr::FieldAccess { ident }, _) => {
             errors.push(SemanticError::FieldAccessOnNonStruct { ty, field: *ident });
@@ -473,7 +505,7 @@ where
         }
         (Ptr::PtrFieldAccess { ident }, Type::Pointer(inner_ty)) => {
             if let Type::Struct(struct_name) = inner_ty.as_ref() {
-                let field_ty = match structs.get_field_info(struct_name, *ident) {
+                let info = match structs.get_field_info(struct_name, *ident) {
                     Ok(ty) => ty,
                     Err(err) => {
                         errors.push(err);
@@ -481,7 +513,8 @@ where
                     }
                 };
 
-                Some((field_ty, ident.1))
+                let size_hint = SizeHint::new(&info, structs);
+                Some(((info.ty, ident.1), size_hint))
             } else {
                 errors.push(SemanticError::PtrFieldAccessOnNonPtr { ty, field: *ident });
                 None
@@ -499,7 +532,15 @@ where
             let index_ty = validate_expression(errors, &index, namespace, functions, structs)?;
 
             if index_ty.0 == Type::Int {
-                Some((inner_ty.as_ref().to_owned(), ty.1))
+                let inner_ty_size = structs.get_size(inner_ty);
+
+                Some((
+                    (inner_ty.as_ref().to_owned(), ty.1),
+                    SizeHint {
+                        offset: 0,
+                        size: inner_ty_size.byte_count,
+                    },
+                ))
             } else {
                 errors.push(SemanticError::MissmatchedType {
                     ty: index_ty,
@@ -512,7 +553,13 @@ where
             errors.push(SemanticError::ArrayAccessOnNonArray { ty });
             None
         }
-        (Ptr::PtrDeref, Type::Pointer(inner_ty)) => Some((inner_ty.as_ref().clone(), ty.1)),
+        (Ptr::PtrDeref, Type::Pointer(inner_ty)) => {
+            let size = structs.get_size(&inner_ty).byte_count;
+            Some((
+                (inner_ty.as_ref().clone(), ty.1),
+                SizeHint { offset: 0, size },
+            ))
+        }
         (Ptr::PtrDeref, Type::NullPtr) => {
             errors.push(SemanticError::NullPtrDeref { span: ty.1 });
             None

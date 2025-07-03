@@ -17,7 +17,7 @@ pub struct StructNamespace<'src, T = StructInfo<'src>> {
 
 #[derive(Debug, Clone)]
 pub struct StructInfo<'src> {
-    pub size: StructSize,
+    pub size: TySize,
     pub fields: BTreeMap<&'src str, StructFieldInfo<'src>>,
     pub span: SimpleSpan,
 }
@@ -30,7 +30,7 @@ pub struct StructFieldInfo<'src> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct StructSize {
+pub struct TySize {
     pub byte_count: usize,
     pub alignment: usize,
 }
@@ -62,7 +62,7 @@ impl<'a, 'src> StructNamespace<'src, StructStatus<'a, 'src>> {
     pub fn calculate_size_of(
         &mut self,
         ident: Spanned<&'src str>,
-    ) -> Result<StructSize, SemanticError<'src>> {
+    ) -> Result<TySize, SemanticError<'src>> {
         let size = self.calculate_size_of_inner(ident);
 
         if size.is_err() {
@@ -75,7 +75,7 @@ impl<'a, 'src> StructNamespace<'src, StructStatus<'a, 'src>> {
     fn calculate_size_of_inner(
         &mut self,
         ident: Spanned<&'src str>,
-    ) -> Result<StructSize, SemanticError<'src>> {
+    ) -> Result<TySize, SemanticError<'src>> {
         match self.structs.get(ident.0) {
             None => Err(SemanticError::UnknownStruct { ident }),
             Some(StructStatus::Registered { .. }) => {
@@ -98,7 +98,7 @@ impl<'a, 'src> StructNamespace<'src, StructStatus<'a, 'src>> {
                 return Err(SemanticError::RecursiveStruct { ident });
             }
             Some(StructStatus::Error) => {
-                return Ok(StructSize {
+                return Ok(TySize {
                     byte_count: 0,
                     alignment: 0,
                 });
@@ -111,7 +111,7 @@ impl<'a, 'src> StructNamespace<'src, StructStatus<'a, 'src>> {
         &mut self,
         def: &StructDef<'src>,
     ) -> Result<StructInfo<'src>, SemanticError<'src>> {
-        let mut struct_size = StructSize {
+        let mut struct_size = TySize {
             byte_count: 0,
             alignment: 0,
         };
@@ -121,25 +121,9 @@ impl<'a, 'src> StructNamespace<'src, StructStatus<'a, 'src>> {
         for field in &def.fields {
             self.validate_type_name(&field.ty)?;
 
-            let size = match field.ty.0 {
-                Type::Int => StructSize {
-                    byte_count: 4,
-                    alignment: 4,
-                },
-                Type::Bool => StructSize {
-                    byte_count: 1,
-                    alignment: 1,
-                },
-                Type::Struct(ident) => self.calculate_size_of((ident, field.ty.1))?,
-                Type::Pointer(_) => StructSize {
-                    byte_count: 8,
-                    alignment: 8,
-                },
-                Type::Array(_) => StructSize {
-                    byte_count: 8,
-                    alignment: 8,
-                },
-                Type::NullPtr => unreachable!("NullPtr can not be a field type"),
+            let size = match type_size(&field.ty.0) {
+                Ok(size) => size,
+                Err(ident) => self.calculate_size_of((ident, field.ty.1))?,
             };
 
             struct_size.byte_count = align_bytes(struct_size.byte_count, size.alignment);
@@ -160,6 +144,8 @@ impl<'a, 'src> StructNamespace<'src, StructStatus<'a, 'src>> {
 
             struct_size.alignment = max(struct_size.alignment, size.alignment);
         }
+
+        struct_size.byte_count = align_bytes(struct_size.byte_count, struct_size.alignment);
 
         Ok(StructInfo {
             size: struct_size,
@@ -206,7 +192,7 @@ impl<'src> StructNamespace<'src> {
         &self,
         struct_name: &'src str,
         field: Spanned<&'src str>,
-    ) -> Result<Type<'src>, SemanticError<'src>> {
+    ) -> Result<StructFieldInfo<'src>, SemanticError<'src>> {
         let struct_info = self.structs.get(struct_name).unwrap();
 
         let field = struct_info
@@ -217,6 +203,36 @@ impl<'src> StructNamespace<'src> {
                 field,
             })?;
 
-        Ok(field.ty.clone())
+        Ok(field.clone())
+    }
+
+    pub fn get_size(&self, ty: &Type<'src>) -> TySize {
+        match type_size(ty) {
+            Ok(size) => size,
+            Err(ident) => self.structs.get(ident).unwrap().size,
+        }
+    }
+}
+
+fn type_size<'a>(ty: &Type<'a>) -> Result<TySize, &'a str> {
+    match ty {
+        Type::Int => Ok(TySize {
+            byte_count: 4,
+            alignment: 4,
+        }),
+        Type::Bool => Ok(TySize {
+            byte_count: 1,
+            alignment: 1,
+        }),
+        Type::Struct(ident) => Err(&ident),
+        Type::Pointer(_) => Ok(TySize {
+            byte_count: 8,
+            alignment: 8,
+        }),
+        Type::Array(_) => Ok(TySize {
+            byte_count: 8,
+            alignment: 8,
+        }),
+        Type::NullPtr => unreachable!("NullPtr can not be a field type"),
     }
 }

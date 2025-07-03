@@ -1,10 +1,10 @@
-use std::fmt::{Debug, Display};
+use std::{cell::{Ref, RefCell}, fmt::{Debug, Display}};
 
 use chumsky::span::SimpleSpan;
 
 use crate::{
     core::Type,
-    lexer::{AssignOperator, BinaryOperator, GetSpan, Spanned, UnaryOperator},
+    lexer::{AssignOperator, BinaryOperator, GetSpan, Spanned, UnaryOperator}, semantic::SizeHint,
 };
 
 #[derive(Debug, Clone)]
@@ -54,6 +54,7 @@ pub enum Lvalue<'a, Num = ValueNum> {
     Ptr {
         lvalue: Box<Self>,
         ptr: Ptr<'a, Num>,
+        size_hint: RefCell<Option<SizeHint>>
     },
 }
 
@@ -71,6 +72,7 @@ impl<'a, Num: Debug> From<(Lvalue<'a, Num>, Ptr<'a, Num>)> for Lvalue<'a, Num> {
         Self::Ptr {
             lvalue: Box::new(value.0),
             ptr: value.1,
+            size_hint: RefCell::new(None)
         }
     }
 }
@@ -99,6 +101,9 @@ pub enum Expression<'a, Num = ValueNum> {
     Access {
         expr: Box<Self>,
         ptr: Ptr<'a, Num>,
+        /// A simplified access. This value gets by check_status_and_types
+        /// RefCell is just a workaround, because i dont have the nerves to make Expression generic over memory access variants
+        size_hint: RefCell<Option<SizeHint>>,
     },
 }
 
@@ -107,6 +112,7 @@ impl<'a, Num> From<(Expression<'a, Num>, Ptr<'a, Num>)> for Expression<'a, Num> 
         Self::Access {
             expr: Box::new(value.0),
             ptr: value.1,
+            size_hint: RefCell::new(None)
         }
     }
 }

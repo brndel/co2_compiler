@@ -10,6 +10,19 @@ pub enum Register {
     Stack(StackRegister),
 }
 
+impl Register {
+    pub fn is_stack(&self) -> bool {
+        match self {
+            Register::Stack(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn to_64(&self) -> Register64 {
+        (*self).into()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[allow(dead_code)]
 pub enum SystemRegister {

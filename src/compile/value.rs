@@ -8,6 +8,15 @@ pub enum Value {
     Immediate(i32),
 }
 
+impl Value {
+    pub fn is_stack(&self) -> bool {
+        match self {
+            Value::Register(register) => register.is_stack(),
+            _ => false,
+        }
+    }
+}
+
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -54,6 +63,15 @@ impl PartialEq<Register> for Value {
         match self {
             Value::Register(register) => register == other,
             Value::Immediate(_) => false,
+        }
+    }
+}
+
+impl PartialEq<Register64> for Value64 {
+    fn eq(&self, other: &Register64) -> bool {
+        match self {
+            Value64::Register(register) => register == other,
+            Value64::Immediate(_) => false,
         }
     }
 }

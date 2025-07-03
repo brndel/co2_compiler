@@ -3,13 +3,11 @@ use std::fmt::Display;
 use crate::{
     compile::{
         Register,
-        register::{
-            FunctionArgRegister, NumRegister64, Register64, StackRegister,
-            SystemRegister,
-        },
-        value::Value,
+        register::{FunctionArgRegister, NumRegister64, Register64, StackRegister, SystemRegister},
+        value::{Value, Value64},
     },
-    ssa::BlockLabel,
+    ssa::{BlockLabel, SsaValue},
+    util::align_bytes,
 };
 
 #[derive(Debug)]
@@ -18,9 +16,17 @@ pub enum Instruction<'a> {
         src: Value,
         dst: Register,
     },
+    Move64 {
+        src: Value64,
+        dst: Register64,
+    },
     Add {
         reg: Register,
         value: Value,
+    },
+    Add64 {
+        reg: Register64,
+        value: Value64,
     },
     Sub {
         reg: Register,
@@ -103,6 +109,27 @@ pub enum Instruction<'a> {
         dst: Option<Register>,
         params: Vec<Value>,
     },
+    Alloc {
+        byte_count: usize,
+        dst: Option<Register>,
+        array_len: Option<Value>,
+    },
+    MemGet {
+        target: Register,
+        source_ptr: Value,
+        offset: usize,
+        field_size: usize,
+    },
+    MemSet {
+        target_ptr: Register,
+        source: Value,
+        offset: usize,
+        field_size: usize,
+    },
+    CheckArrayLen {
+        array_ptr: Value,
+        index: Value,
+    },
     GlobalLabel {
         label: BlockLabel<'a>,
     },
@@ -168,8 +195,24 @@ impl<'a> Display for Instruction<'a> {
                     }
                 }
             }
-            Instruction::Add { reg, value } => write!(f, "add {}, {}", value, reg),
-            Instruction::Sub { reg, value } => write!(f, "sub {}, {}", value, reg),
+            Instruction::Move64 { src, dst } => {
+                if src == dst {
+                    Ok(())
+                } else {
+                    match (&src, &dst) {
+                        (Value64::Register(Register64::Stack(_)), Register64::Stack(_)) => {
+                            writeln!(f, "mov {}, {}", src, Register64::Temp)?;
+                            write!(f, "mov {}, {}", Register64::Temp, dst)
+                        }
+                        _ => {
+                            write!(f, "mov {}, {}", src, dst)
+                        }
+                    }
+                }
+            }
+            Instruction::Add { reg, value } => write!(f, "addl {}, {}", value, reg),
+            Instruction::Add64 { reg, value } => write!(f, "add {}, {}", value, reg),
+            Instruction::Sub { reg, value } => write!(f, "subl {}, {}", value, reg),
             Instruction::Mul { reg, value } => write!(f, "imul {}, {}", value, reg),
             Instruction::Div { reg, value } => {
                 writeln!(f, "movl {}, {}", reg, SystemRegister::Eax)?;
@@ -230,7 +273,6 @@ impl<'a> Display for Instruction<'a> {
             Instruction::Negate { reg } => write!(f, "negl {}", reg),
             Instruction::LogicNot { reg } => write!(f, "xorl {}, {}", Value::Immediate(1), reg),
             Instruction::BitNot { reg } => write!(f, "notl {}", reg),
-
             Instruction::Label { label } => {
                 write!(f, "{}:", label)
             }
@@ -257,7 +299,6 @@ impl<'a> Display for Instruction<'a> {
             } => {
                 writeln!(f, "push %rbp")?;
                 writeln!(f, "mov %rsp, %rbp")?;
-                
 
                 writeln!(f, "push {}", NumRegister64::R12)?;
                 writeln!(f, "push {}", NumRegister64::R13)?;
@@ -265,9 +306,8 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(f, "push {}", NumRegister64::R15)?;
 
                 if let Register::Stack(StackRegister(registers)) = *max_register {
-                    // Align to nearest 16 byte value
-                    let bytes = (registers * 4 + 15) & !15;
-                    
+                    let bytes = align_bytes(registers * 4, 16);
+
                     writeln!(f, "sub {}, %rsp", Value::Immediate(bytes as i32))?;
                 }
 
@@ -280,8 +320,7 @@ impl<'a> Display for Instruction<'a> {
                         writeln!(f, "movl {}, {}", param_reg, target)?;
                     }
                 }
-                
-                
+
                 Ok(())
             }
             Instruction::Return {
@@ -354,11 +393,124 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(f, "pop {}", NumRegister64::R9)?;
                 writeln!(f, "pop {}", Register64::Temp)?;
                 if let Some(dst) = dst {
-                    write!(f, "mov {}, {}", SystemRegister::Eax, dst)?
+                    writeln!(f, "mov {}, {}", SystemRegister::Eax, dst)?
                 }
 
                 Ok(())
             }
+            Instruction::Alloc {
+                byte_count,
+                dst,
+                array_len,
+            } => {
+                writeln!(f, "push {}", Register64::Temp)?;
+                writeln!(f, "push {}", NumRegister64::R9)?;
+                writeln!(f, "push {}", NumRegister64::R10)?;
+                writeln!(f, "push {}", NumRegister64::R11)?;
+
+                if let Some(len) = array_len {
+                    let byte_count = byte_count + 8;
+
+                    writeln!(f, "mov {}, %rdi", len)?;
+                    writeln!(f, "test %rdi, %rdi")?;
+                    writeln!(f, "js call_abort")?;
+                    writeln!(f, "mov {}, %rsi", Value::Immediate(byte_count as i32))?;
+                    writeln!(f, "call calloc")?;
+
+                    writeln!(f, "mov {}, {}", len, SystemRegister::Eax)?;
+                    writeln!(f, "add {}, {}", Value::Immediate(8), SystemRegister::Eax)?;
+                } else {
+                    writeln!(f, "mov {}, %rdi", Value::Immediate(1))?;
+                    writeln!(f, "mov {}, %rsi", Value::Immediate(*byte_count as i32))?;
+                    writeln!(f, "call calloc")?;
+                }
+
+                writeln!(f, "pop {}", NumRegister64::R11)?;
+                writeln!(f, "pop {}", NumRegister64::R10)?;
+                writeln!(f, "pop {}", NumRegister64::R9)?;
+                writeln!(f, "pop {}", Register64::Temp)?;
+
+                if let Some(dst) = dst {
+                    writeln!(f, "mov {}, {}", SystemRegister::Eax, dst)?
+                }
+
+                Ok(())
+            }
+            Instruction::MemGet {
+                target,
+                source_ptr,
+                offset,
+                field_size,
+            } => {
+                if source_ptr.is_stack() {
+                    writeln!(f, "movq {} {}", source_ptr, SystemRegister::Eax)?;
+
+                    match field_size {
+                        1 => writeln!(f, "movb {}({}), {}", offset, SystemRegister::Eax, target)?,
+                        4 => writeln!(f, "movl {}({}), {}", offset, SystemRegister::Eax, target)?,
+                        8 => writeln!(
+                            f,
+                            "movq {}({}), {}",
+                            offset,
+                            SystemRegister::Eax,
+                            target.to_64()
+                        )?,
+                        _ => unreachable!(),
+                    }
+                } else {
+                    match field_size {
+                        1 => writeln!(f, "movb {}({}), {}", offset, source_ptr, target)?,
+                        4 => writeln!(f, "movl {}({}), {}", offset, source_ptr, target)?,
+                        8 => writeln!(f, "movq {}({}), {}", offset, source_ptr, target.to_64())?,
+                        _ => unreachable!(),
+                    }
+                }
+
+                Ok(())
+            }
+            Instruction::MemSet {
+                target_ptr,
+                source,
+                offset,
+                field_size,
+            } => {
+                if target_ptr.is_stack() {
+                    writeln!(f, "movq {}, {}", target_ptr, SystemRegister::Eax)?;
+
+                    match field_size {
+                        1 => writeln!(f, "movb {}, {}({})", source, offset, SystemRegister::Eax)?,
+                        4 => writeln!(f, "movl {}, {}({})", source, offset, SystemRegister::Eax)?,
+                        8 => writeln!(f, "movq {}, {}({})", source, offset, SystemRegister::Eax,)?,
+                        _ => unreachable!(),
+                    }
+                } else {
+                    match field_size {
+                        1 => writeln!(f, "movb {}, {}({})", source, offset, target_ptr)?,
+                        4 => writeln!(f, "movl {}, {}({})", source, offset, target_ptr)?,
+                        8 => writeln!(f, "movq {}, {}({})", source, offset, target_ptr,)?,
+                        _ => unreachable!(),
+                    }
+                }
+
+                Ok(())
+            }
+            Instruction::CheckArrayLen { array_ptr, index } => {
+                if array_ptr.is_stack() {
+                    writeln!(f, "movq {}, {}", array_ptr, SystemRegister::Eax)?;
+                    writeln!(f, "movq -8({}), {}", SystemRegister::Eax, SystemRegister::Eax)?;
+                } else {
+                    writeln!(f, "movq -8({}), {}", array_ptr, SystemRegister::Eax)?;
+                }
+
+                writeln!(f, "test {}, {}", SystemRegister::Eax, SystemRegister::Eax)?;
+                writeln!(f, "js call_abort")?;
+                
+                writeln!(f, "test {}, {}", SystemRegister::Eax, index)?;
+                writeln!(f, "jae call_abort")?;
+
+
+                Ok(())
+            },
             Instruction::GlobalLabel { label } => write!(f, ".global {}", label),
         }
     }

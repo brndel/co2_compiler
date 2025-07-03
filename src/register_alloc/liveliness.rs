@@ -89,10 +89,57 @@ impl<'a> LivelinessContainer<'a> {
                 SsaInstruction::FunctionArg { index: _, target } => {
                     self.remove_live(line, target);
                 }
-                SsaInstruction::FunctionCall { target: _, name: _, args } => {
+                SsaInstruction::FunctionCall {
+                    target,
+                    name: _,
+                    args,
+                } => {
+                    if let Some(target) = target {
+                        self.remove_live(line, target);
+                    }
                     for arg in args {
                         self.add_live(line, arg);
                     }
+                }
+                SsaInstruction::Allocate {
+                    target,
+                    ty: _,
+                    array_len,
+                } => {
+                    if let Some(target) = target {
+                        self.remove_live(line, target);
+                    }
+                    if let Some(array_len) = array_len {
+                        self.add_live(line, array_len);
+                    }
+                }
+                SsaInstruction::MemGet {
+                    target,
+                    source_ptr,
+                    offset: _,
+                    field_size: _,
+                } => {
+                    self.remove_live(line, target);
+                    self.add_live(line, source_ptr);
+                }
+                SsaInstruction::MemSet {
+                    target_ptr: target,
+                    source,
+                    offset: _,
+                    field_size: _,
+                } => {
+                    self.remove_live(line, target);
+                    self.add_live(line, source);
+                }
+                SsaInstruction::CalcArrayPtr {
+                    target,
+                    ptr,
+                    index,
+                    struct_size,
+                } => {
+                    self.remove_live(line, target);
+                    self.add_live(line, ptr);
+                    self.add_live(line, index);
                 }
             }
         }

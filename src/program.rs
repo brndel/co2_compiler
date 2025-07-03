@@ -56,4 +56,11 @@ impl<'a, Num> Program<'a, Num> {
             TopLevelDef::Struct(struct_def) => Some(struct_def),
         })
     }
+
+    pub fn take_functions(self) -> impl Iterator<Item = FunctionDef<'a, Num>> {
+        self.defs.into_iter().filter_map(|def| match def {
+            TopLevelDef::Function(function_def) => Some(function_def),
+            TopLevelDef::Struct(_) => None,
+        })
+    }
 }

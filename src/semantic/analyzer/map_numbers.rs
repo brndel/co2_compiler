@@ -72,11 +72,11 @@ fn map_number_statement<'a>(
             let lvalue = map_lvalue(errors, lvalue);
             let value = map_num_expr(errors, value);
             Statement::Assignment {
-                    lvalue: lvalue?,
-                    op,
-                    value: value?,
-                }
-        },
+                lvalue: lvalue?,
+                op,
+                value: value?,
+            }
+        }
         Statement::FunctionCall(fn_call) => Statement::FunctionCall(map_fn_call(errors, fn_call)?),
         Statement::Return { value: expr } => Statement::Return {
             value: map_num_expr(errors, expr)?,
@@ -164,13 +164,18 @@ fn map_num_expr<'a>(
                 b: Box::new(b?),
             })
         }
-        Expression::Access { expr, ptr } => {
+        Expression::Access {
+            expr,
+            ptr,
+            size_hint,
+        } => {
             let expr = map_num_expr(errors, *expr);
             let ptr = map_ptr(errors, ptr)?;
 
             Some(Expression::Access {
                 expr: Box::new(expr?),
                 ptr,
+                size_hint,
             })
         }
         Expression::FunctionCall(fn_call) => {
@@ -191,7 +196,7 @@ fn map_fn_call<'a>(
             Some(FunctionCall::AllocArray {
                 ty,
                 len: Box::new(len),
-                span
+                span,
             })
         }
         FunctionCall::Fn { ident, args } => {
@@ -226,13 +231,18 @@ fn map_lvalue<'a>(
 ) -> Option<Lvalue<'a>> {
     match lvalue {
         Lvalue::Ident(ident) => Some(Lvalue::Ident(ident)),
-        Lvalue::Ptr { lvalue, ptr } => {
+        Lvalue::Ptr {
+            lvalue,
+            ptr,
+            size_hint,
+        } => {
             let lvalue = map_lvalue(errors, *lvalue);
             let ptr = map_ptr(errors, ptr);
 
             Some(Lvalue::Ptr {
                 lvalue: Box::new(lvalue?),
                 ptr: ptr?,
+                size_hint,
             })
         }
     }

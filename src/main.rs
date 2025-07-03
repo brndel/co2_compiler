@@ -51,44 +51,44 @@ fn main() {
         exit(7);
     };
 
-    dbg!(analyzed.structs);
+    dbg!(&analyzed.structs);
 
     #[cfg(debug_assertions)]
     println!("Semantic analyzer passed");
 
-    // let func_graphs =  analyzed.program.functions.into_iter().map(|func | FunctionIrGraph::new(func)).collect::<Vec<_>>();
+    let func_graphs =  analyzed.program.take_functions().map(|func: program::FunctionDef<'_> | FunctionIrGraph::new(func)).collect::<Vec<_>>();
 
-    // let func_labels = BTreeMap::from_iter(func_graphs.iter().map(|func| (func.name, func.start_label)));
+    let func_labels = BTreeMap::from_iter(func_graphs.iter().map(|func| (func.name, func.start_label)));
 
-    // let mut assembly = Vec::new();
+    let mut assembly = Vec::new();
 
-    // for func in &func_graphs {
-    //     #[cfg(debug_assertions)]
-    //     for block in func.graph.iter() {
-    //         println!("{}", block);
-    //     }
+    for func in &func_graphs {
+        #[cfg(debug_assertions)]
+        for block in func.graph.iter() {
+            println!("{}", block);
+        }
 
-    //     let ir_graph = &func.graph;
+        let ir_graph = &func.graph;
 
-    //     let live_container = LivelinessContainer::new(&ir_graph);
+        let live_container = LivelinessContainer::new(&ir_graph);
 
-    //     let live_graph = LivelinessGraph::new(&ir_graph, &live_container);
+        let live_graph = LivelinessGraph::new(&ir_graph, &live_container);
 
-    //     let registers = live_graph.greedy_coloring::<Register>();
+        let registers = live_graph.greedy_coloring::<Register>();
 
-    //     let mut asm = generate_asm(func, &registers, live_graph.visited_blocks(), &func_labels);
+        let mut asm = generate_asm(func, &registers, live_graph.visited_blocks(), &func_labels, &analyzed.structs);
 
-    //     assembly.append(&mut asm);
-    // }
+        assembly.append(&mut asm);
+    }
 
-    // #[cfg(debug_assertions)]
-    // for instr in &assembly {
-    //     println!("{:?}", instr);
-    // }
+    #[cfg(debug_assertions)]
+    for instr in &assembly {
+        println!("{:?}", instr);
+    }
 
-    // compile_code(args.output_file, assembly, true);
+    compile_code(args.output_file, assembly, true);
 
-    // exit(0);
+    exit(0);
 }
 
 fn parse_file<'a>(source: SourceFile<'a>) -> Option<Program<'a, ParseNum<'a>>> {

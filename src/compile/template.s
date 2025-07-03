@@ -4,7 +4,8 @@
 .extern putchar
 .extern fflush
 .extern stdout
-
+.extern calloc
+.extern abort
 
 main:
 call main_start_0
@@ -18,3 +19,5 @@ movq %rax, %rdi
 movq $0x3C, %rax
 syscall
 
+call_abort:
+call abort

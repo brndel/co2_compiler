@@ -1,6 +1,6 @@
 use crate::{
-    parser::Statement,
-    ssa::{SsaInstruction, SsaValue, basic_block::BasicBlockEnd},
+    parser::{Lvalue, Ptr, Statement},
+    ssa::{SsaInstruction, SsaValue, VirtualRegister, basic_block::BasicBlockEnd},
 };
 
 use super::{
@@ -33,35 +33,79 @@ pub fn build_ir_statement<'a>(
             }
         }
         Statement::Assignment { lvalue, op, value } => {
-            todo!()
-            // let value = build_ir_expr(value, ctx, builder);
+            let value = build_ir_expr(value, ctx, builder);
+            let (target, ident) = build_lvalue_target(lvalue, ctx, builder);
 
-            // let target = ctx.counter.next_register(ident.0);
+            match target {
+                LvalueTarget::Register => {
+                    let target = ctx.counter.next_register(ident);
 
-            // match op {
-            //     Some(op) => {
-            //         let current_value = builder.get_variable(ident.0, ctx);
+                    match op {
+                        Some(op) => {
+                            let current_value = builder.get_variable(ident, ctx);
 
-            //         builder.push_instruction(SsaInstruction::BinaryOp {
-            //             target,
-            //             a: SsaValue::Register(current_value),
-            //             op: (*op).into(),
-            //             b: value,
-            //         });
-            //     }
-            //     None => {
-            //         builder.push_instruction(SsaInstruction::Move {
-            //             target,
-            //             source: value,
-            //         });
-            //     }
-            // }
+                            builder.push_instruction(SsaInstruction::BinaryOp {
+                                target,
+                                a: SsaValue::Register(current_value),
+                                op: (*op).into(),
+                                b: value,
+                            });
+                        }
+                        None => {
+                            builder.push_instruction(SsaInstruction::Move {
+                                target,
+                                source: value,
+                            });
+                        }
+                    }
 
-            // builder.set_variable(ident.0, target);
+                    builder.set_variable(ident, target);
+                }
+                LvalueTarget::Ptr {
+                    target,
+                    offset,
+                    field_size,
+                } => match op {
+                    Some(op) => {
+                        let current_value = ctx.counter.next();
+
+                        builder.push_instruction(SsaInstruction::MemGet {
+                            target: current_value,
+                            source_ptr: SsaValue::Register(target),
+                            offset,
+                            field_size,
+                        });
+
+                        let temp_target = ctx.counter.next();
+
+                        builder.push_instruction(SsaInstruction::BinaryOp {
+                            target: temp_target,
+                            a: SsaValue::Register(current_value),
+                            op: (*op).into(),
+                            b: value,
+                        });
+
+                        builder.push_instruction(SsaInstruction::MemSet {
+                            target_ptr: target,
+                            source: SsaValue::Register(temp_target),
+                            offset,
+                            field_size,
+                        });
+                    }
+                    None => {
+                        builder.push_instruction(SsaInstruction::MemSet {
+                            target_ptr: target,
+                            source: value,
+                            offset,
+                            field_size,
+                        });
+                    }
+                },
+            }
         }
         Statement::FunctionCall(fn_call) => {
             build_fn_call(fn_call, None, ctx, builder);
-        },
+        }
         Statement::If {
             condition,
             then,
@@ -218,6 +262,166 @@ pub fn build_ir_statement<'a>(
                     break;
                 }
                 build_ir_statement(statement, ctx, builder);
+            }
+        }
+    }
+}
+
+pub enum LvalueTarget<'a> {
+    Register,
+    Ptr {
+        target: VirtualRegister<'a>,
+        offset: usize,
+        field_size: usize,
+    },
+}
+
+pub fn build_lvalue_target<'a>(
+    lvalue: &Lvalue<'a>,
+    ctx: &mut Context<'a>,
+    builder: &mut BlockBuilder<'a>,
+) -> (LvalueTarget<'a>, &'a str) {
+    match lvalue {
+        Lvalue::Ident((ident, _span)) => (LvalueTarget::Register, ident),
+        Lvalue::Ptr {
+            lvalue,
+            ptr,
+            size_hint,
+        } => {
+            let hint = size_hint.take().unwrap();
+            match ptr {
+                Ptr::FieldAccess { .. } => {
+                    builder.add_mem_offset(hint.offset);
+                    let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
+
+                    let offset = builder.take_mem_offset();
+
+                    (
+                        LvalueTarget::Ptr {
+                            target: ptr,
+                            offset: offset,
+                            field_size: hint.size,
+                        },
+                        ident,
+                    )
+                }
+                Ptr::PtrFieldAccess { .. } => {
+                    builder.add_mem_offset(hint.offset);
+                    let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
+
+                    let offset = builder.take_mem_offset();
+
+                    (
+                        LvalueTarget::Ptr {
+                            target: ptr,
+                            offset: offset,
+                            field_size: hint.size,
+                        },
+                        ident,
+                    )
+                }
+                Ptr::ArrayAccess { index } => {
+                    let array_ptr_target = ctx.counter.next();
+                    let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
+                    let index = build_ir_expr(index, ctx, builder);
+
+                    builder.push_instruction(SsaInstruction::CalcArrayPtr {
+                        target: array_ptr_target,
+                        ptr: SsaValue::Register(ptr),
+                        index,
+                        struct_size: hint.size,
+                    });
+
+                    let offset = builder.take_mem_offset();
+
+                    (
+                        LvalueTarget::Ptr {
+                            target: array_ptr_target,
+                            offset,
+                            field_size: hint.size,
+                        },
+                        ident,
+                    )
+                }
+                Ptr::PtrDeref => {
+                    let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
+
+                    let offset = builder.take_mem_offset();
+
+                    (
+                        LvalueTarget::Ptr {
+                            target: ptr,
+                            offset,
+                            field_size: hint.size,
+                        },
+                        ident,
+                    )
+                }
+            }
+        }
+    }
+}
+
+pub fn build_lvalue<'a>(
+    lvalue: &Lvalue<'a>,
+    ctx: &mut Context<'a>,
+    builder: &mut BlockBuilder<'a>,
+) -> (VirtualRegister<'a>, &'a str) {
+    match lvalue {
+        Lvalue::Ident((ident, _span)) => {
+            let reg = builder.get_variable(ident, ctx);
+
+            (reg, ident)
+        }
+        Lvalue::Ptr {
+            lvalue,
+            ptr,
+            size_hint,
+        } => {
+            let hint = size_hint.take().unwrap();
+
+            match ptr {
+                Ptr::FieldAccess { .. } => {
+                    builder.add_mem_offset(hint.offset);
+
+                    build_lvalue(&lvalue, ctx, builder)
+                }
+                Ptr::PtrFieldAccess { .. } => {
+                    builder.add_mem_offset(hint.offset);
+
+                    let target = ctx.counter.next();
+                    let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
+
+                    builder.push_mem_access(target, SsaValue::Register(ptr));
+
+                    (target, ident)
+                }
+                Ptr::ArrayAccess { index } => {
+                    let array_ptr_target = ctx.counter.next();
+                    let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
+                    let index = build_ir_expr(index, ctx, builder);
+
+                    builder.push_instruction(SsaInstruction::CalcArrayPtr {
+                        target: array_ptr_target,
+                        ptr: SsaValue::Register(ptr),
+                        index,
+                        struct_size: hint.size,
+                    });
+
+                    let target = ctx.counter.next();
+
+                    builder.push_mem_access(target, SsaValue::Register(array_ptr_target));
+
+                    (target, ident)
+                }
+                Ptr::PtrDeref => {
+                    let target = ctx.counter.next();
+                    let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
+
+                    builder.push_mem_access(target, SsaValue::Register(ptr));
+
+                    (target, ident)
+                }
             }
         }
     }

@@ -2,8 +2,8 @@ use chumsky::span::SimpleSpan;
 
 use crate::{
     lexer::BinaryOperator,
-    parser::{Expression, FunctionCall},
-    ssa::{basic_block::BasicBlockEnd, SsaInstruction, SsaValue, VirtualRegister},
+    parser::{Expression, FunctionCall, Ptr},
+    ssa::{SsaInstruction, SsaValue, VirtualRegister, basic_block::BasicBlockEnd},
 };
 
 use super::builder::{BlockBuilder, Context};
@@ -42,12 +42,7 @@ pub fn build_ir_expr<'a>(
 
                 let target = ctx.counter.next();
 
-                builder.push_instruction(SsaInstruction::BinaryOp {
-                    target,
-                    a,
-                    op,
-                    b,
-                });
+                builder.push_instruction(SsaInstruction::BinaryOp { target, a, op, b });
 
                 SsaValue::Register(target)
             }
@@ -92,7 +87,62 @@ pub fn build_ir_expr<'a>(
 
             SsaValue::Register(target)
         }
-        _ => todo!()
+        Expression::Access {
+            expr,
+            ptr,
+            size_hint,
+        } => {
+            let hint = size_hint.take().unwrap();
+
+            match ptr {
+                Ptr::FieldAccess { .. } => {
+                    builder.add_mem_offset(hint.offset);
+                    builder.set_mem_field_size(hint.size);
+
+                    build_ir_expr(expr, ctx, builder)
+                }
+                Ptr::PtrFieldAccess { .. } => {
+                    builder.add_mem_offset(hint.offset);
+                    builder.set_mem_field_size(hint.size);
+
+                    let target = ctx.counter.next();
+                    let ptr = build_ir_expr(expr, ctx, builder);
+
+                    builder.push_mem_access(target, ptr);
+
+                    SsaValue::Register(target)
+                }
+                Ptr::ArrayAccess { index } => {
+                    let array_ptr_target = ctx.counter.next();
+                    let ptr = build_ir_expr(expr, ctx, builder);
+                    let index = build_ir_expr(index, ctx, builder);
+
+                    builder.push_instruction(SsaInstruction::CalcArrayPtr {
+                        target: array_ptr_target,
+                        ptr,
+                        index,
+                        struct_size: hint.size,
+                    });
+
+                    let target = ctx.counter.next();
+
+                    builder.push_mem_access(target, SsaValue::Register(array_ptr_target));
+
+                    SsaValue::Register(target)
+                }
+                Ptr::PtrDeref => {
+                    builder.set_mem_field_size(hint.size);
+
+                    let target = ctx.counter.next();
+                    let ptr = build_ir_expr(expr, ctx, builder);
+
+                    builder.push_mem_access(target, ptr);
+
+                    SsaValue::Register(target)
+                }
+            }
+        }
+        Expression::NullPtr(_) => SsaValue::ImmediateNum(0),
     }
 }
 
@@ -155,14 +205,33 @@ pub fn build_fn_call<'a>(
     ctx: &mut Context<'a>,
     builder: &mut BlockBuilder<'a>,
 ) {
-    todo!()
-    // let args = fn_call.args
-    //     .iter()
-    //     .map(|arg| build_ir_expr(arg, ctx, builder))
-    //     .collect();
-    // builder.push_instruction(SsaInstruction::FunctionCall {
-    //     target,
-    //     name: fn_call.ident.0,
-    //     args,
-    // });
+    match fn_call {
+        FunctionCall::Alloc { ty, .. } => {
+            builder.push_instruction(SsaInstruction::Allocate {
+                target,
+                ty: ty.0.clone(),
+                array_len: None,
+            });
+        }
+        FunctionCall::AllocArray { ty, len, .. } => {
+            let array_len = build_ir_expr(&len, ctx, builder);
+
+            builder.push_instruction(SsaInstruction::Allocate {
+                target,
+                ty: ty.0.clone(),
+                array_len: Some(array_len),
+            });
+        }
+        FunctionCall::Fn { ident, args } => {
+            let args = args
+                .iter()
+                .map(|arg| build_ir_expr(arg, ctx, builder))
+                .collect();
+            builder.push_instruction(SsaInstruction::FunctionCall {
+                target,
+                name: ident.0,
+                args,
+            });
+        }
+    }
 }

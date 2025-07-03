@@ -5,4 +5,5 @@ mod analyzer;
 
 pub use analyzed::Analyzed;
 pub use err::SemanticError;
-pub use namespace::Namespace;
+pub use namespace::*;
+pub use analyzer::SizeHint;
