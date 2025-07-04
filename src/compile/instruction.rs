@@ -181,7 +181,7 @@ impl<'a> Display for Instruction<'a> {
         match self {
             Instruction::Move { src, dst } => {
                 if src == dst {
-                    return Ok(())
+                    return Ok(());
                 }
                 let size = if src.is_immediate() {
                     ByteSize::B4
@@ -459,17 +459,19 @@ impl<'a> Display for Instruction<'a> {
                 dst,
                 array_len,
             } => {
+                if let Some(len) = array_len {
+                    writeln!(f, "movl {}, %edi", len)?;
+                    writeln!(f, "test %edi, %edi")?;
+                    writeln!(f, "js call_abort")?;
+                }
+
                 writeln!(f, "push {}", NumRegister::Temp.with_size(ByteSize::B8))?;
                 writeln!(f, "push {}", NumRegister::R9.with_size(ByteSize::B8))?;
                 writeln!(f, "push {}", NumRegister::R10.with_size(ByteSize::B8))?;
                 writeln!(f, "push {}", NumRegister::R11.with_size(ByteSize::B8))?;
 
-                if let Some(len) = array_len {
+                if let Some(_) = array_len {
                     let byte_count = byte_count + 8;
-
-                    writeln!(f, "movl {}, %edi", len)?;
-                    writeln!(f, "test %edi, %edi")?;
-                    writeln!(f, "js call_abort")?;
                     writeln!(f, "mov {}, %rsi", Value::Immediate(byte_count as i32))?;
                     writeln!(f, "call calloc")?;
 
@@ -477,12 +479,6 @@ impl<'a> Display for Instruction<'a> {
                         f,
                         "add {}, {}",
                         Value::Immediate(8),
-                        SystemRegister::Eax.with_size(ByteSize::B8)
-                    )?;
-                    writeln!(
-                        f,
-                        "movl {}, -8({})",
-                        len,
                         SystemRegister::Eax.with_size(ByteSize::B8)
                     )?;
                 } else {
@@ -495,6 +491,15 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(f, "pop {}", NumRegister::R10.with_size(ByteSize::B8))?;
                 writeln!(f, "pop {}", NumRegister::R9.with_size(ByteSize::B8))?;
                 writeln!(f, "pop {}", NumRegister::Temp.with_size(ByteSize::B8))?;
+
+                if let Some(len) = array_len {
+                    writeln!(
+                        f,
+                        "movl {}, -8({})",
+                        len,
+                        SystemRegister::Eax.with_size(ByteSize::B8)
+                    )?;
+                }
 
                 if let Some(dst) = dst {
                     writeln!(
@@ -519,7 +524,11 @@ impl<'a> Display for Instruction<'a> {
                 let is_stack = target.is_stack();
 
                 let real_target = target;
-                let target = if is_stack { Register::System(SystemRegister::Ebx) } else {*target};
+                let target = if is_stack {
+                    Register::System(SystemRegister::Ebx)
+                } else {
+                    *target
+                };
 
                 writeln!(
                     f,
@@ -531,7 +540,13 @@ impl<'a> Display for Instruction<'a> {
                 )?;
 
                 if is_stack {
-                    write!(f, "{} {}, {}", MoveInstr.with_size(*field_size), target.with_size(*field_size), real_target)?;
+                    write!(
+                        f,
+                        "{} {}, {}",
+                        MoveInstr.with_size(*field_size),
+                        target.with_size(*field_size),
+                        real_target
+                    )?;
                 }
 
                 Ok(())
@@ -543,7 +558,13 @@ impl<'a> Display for Instruction<'a> {
                 field_size,
             } => {
                 let source = if source.is_stack() {
-                    writeln!(f, "{} {}, {}", MoveInstr.with_size(*field_size), source.with_size(*field_size), SystemRegister::Ebx.with_size(*field_size))?;
+                    writeln!(
+                        f,
+                        "{} {}, {}",
+                        MoveInstr.with_size(*field_size),
+                        source.with_size(*field_size),
+                        SystemRegister::Ebx.with_size(*field_size)
+                    )?;
                     Value::Register(Register::System(SystemRegister::Ebx))
                 } else {
                     *source
@@ -565,15 +586,19 @@ impl<'a> Display for Instruction<'a> {
                 )
             }
             Instruction::CheckArrayLen { array_ptr, index } => {
-                
                 writeln!(f, "# check array index {} of array at {}", index, array_ptr)?;
-                
+
                 // idx < 0
-                writeln!(f, "movl {}, {}", index.with_size(ByteSize::B4), SystemRegister::Eax.with_size(ByteSize::B4))?;
+                writeln!(
+                    f,
+                    "movl {}, {}",
+                    index.with_size(ByteSize::B4),
+                    SystemRegister::Eax.with_size(ByteSize::B4)
+                )?;
 
                 writeln!(f, "test {}, {}", SystemRegister::Eax, SystemRegister::Eax)?;
                 writeln!(f, "js call_abort")?;
-                
+
                 // idx >= len
                 let array_ptr =
                     ensure_ptr_not_on_stack(*array_ptr, Register::System(SystemRegister::Eax), f)?;
@@ -583,7 +608,6 @@ impl<'a> Display for Instruction<'a> {
                     array_ptr.with_size(ByteSize::B8),
                     SystemRegister::Eax
                 )?;
-
 
                 writeln!(f, "cmp {}, {}", index, SystemRegister::Eax)?;
                 writeln!(f, "jle call_abort")?;
@@ -629,13 +653,12 @@ impl Display for WithByteSize<MoveInstr> {
 #[derive(Clone, Copy)]
 struct MoveInstrExtendZero;
 
-
 impl Display for WithByteSize<MoveInstrExtendZero> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.size {
             ByteSize::B1 => write!(f, "movzbl"),
             ByteSize::B2 => write!(f, "movzwl"),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
