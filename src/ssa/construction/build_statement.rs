@@ -338,6 +338,7 @@ pub fn build_lvalue_target<'a>(
                     )
                 }
                 Ptr::PtrDeref => {
+                    builder.set_mem_field_size(hint.size);
                     let (offset, field_size) = builder.take_mem_access();
 
                     let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
@@ -425,6 +426,7 @@ pub fn build_lvalue<'a>(
                     (target, ident)
                 }
                 Ptr::PtrDeref => {
+                    builder.set_mem_field_size(hint.size);
                     let (offset, field_size) = builder.take_mem_access();
 
                     let target = ctx.counter.next();

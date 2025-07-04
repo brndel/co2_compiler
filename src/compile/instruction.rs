@@ -325,7 +325,7 @@ impl<'a> Display for Instruction<'a> {
                             target.with_size(ByteSize::B8)
                         )?;
                     } else {
-                        writeln!(f, "mov {}, {}", param_reg, target)?;
+                        writeln!(f, "mov {}, {}", param_reg, target.with_size(ByteSize::B8))?;
                     }
                 }
 
