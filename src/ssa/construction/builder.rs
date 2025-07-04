@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{compile::ByteSize, ssa::{
-    basic_block::{BasicBlock, BasicBlockEnd, BlockLabel}, counter::Counter, ir_graph::IrGraph, SsaInstruction, SsaValue, VirtualRegister
+    basic_block::{BasicBlock, BasicBlockEnd, BlockLabel}, counter::Counter, ir_graph::IrGraph, SsaInstruction, VirtualRegister
 }};
 
 use super::{AssignPhi, ConBasicBlock, PhiAssignment};

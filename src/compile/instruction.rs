@@ -7,7 +7,7 @@ use crate::{
         register::{FunctionArgRegister, StackRegister, SystemRegister},
         value::Value,
     },
-    ssa::{BlockLabel, SsaValue},
+    ssa::BlockLabel,
     util::align_bytes,
 };
 

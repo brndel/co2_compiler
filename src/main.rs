@@ -18,7 +18,7 @@ use compile::{Register, compile_code, generate_asm};
 use lexer::lexer;
 use parser::{ParseNum, program_parser};
 use program::Program;
-use register_alloc::{Line, LivelinessContainer, LivelinessGraph};
+use register_alloc::{LivelinessContainer, LivelinessGraph};
 use semantic::Analyzed;
 use ssa::FunctionIrGraph;
 

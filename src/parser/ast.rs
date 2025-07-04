@@ -1,4 +1,4 @@
-use std::{cell::{Ref, RefCell}, fmt::{Debug, Display}};
+use std::{cell::RefCell, fmt::{Debug, Display}};
 
 use chumsky::span::SimpleSpan;
 

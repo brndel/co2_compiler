@@ -6,7 +6,7 @@ use chumsky::{
     combinator::DelimitedBy,
     error::Rich,
     extra::{self, ParserExtra},
-    input::{Input, ValueInput},
+    input::{ValueInput},
     prelude::{any, just, one_of, recursive},
     primitive::Just,
     select,
@@ -217,7 +217,7 @@ where
 {
     fn delimited_by_bracket<B: Bracket>(
         self,
-        bracket: B,
+        _: B,
     ) -> DelimitedBy<Self, Just<Token<'src>, I, E>, Just<Token<'src>, I, E>, Token<'src>, Token<'src>>
     {
         self.delimited_by(
