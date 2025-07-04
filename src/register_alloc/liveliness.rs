@@ -119,7 +119,7 @@ impl<'a> LivelinessContainer<'a> {
                     offset: _,
                     field_size: _,
                 } => {
-                    self.remove_live(line, target);
+                    self.add_live(line, &SsaValue::Register(*target));
                     self.add_live(line, source_ptr);
                 }
                 SsaInstruction::MemSet {
@@ -128,14 +128,14 @@ impl<'a> LivelinessContainer<'a> {
                     offset: _,
                     field_size: _,
                 } => {
-                    self.remove_live(line, target);
+                    self.add_live(line, &SsaValue::Register(*target));
                     self.add_live(line, source);
                 }
                 SsaInstruction::CalcArrayPtr {
                     target,
                     ptr,
                     index,
-                    struct_size,
+                    struct_size: _,
                 } => {
                     self.remove_live(line, target);
                     self.add_live(line, ptr);
