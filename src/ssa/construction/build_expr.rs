@@ -104,39 +104,59 @@ pub fn build_ir_expr<'a>(
                 Ptr::PtrFieldAccess { .. } => {
                     builder.add_mem_offset(hint.offset);
                     builder.set_mem_field_size(hint.size);
+                    let (offset, field_size) = builder.take_mem_access();
 
                     let target = ctx.counter.next();
                     let ptr = build_ir_expr(expr, ctx, builder);
 
-                    builder.push_mem_access(target, ptr);
+                    builder.push_instruction(SsaInstruction::MemGet {
+                        target,
+                        source_ptr: ptr,
+                        offset,
+                        field_size,
+                    });
 
                     SsaValue::Register(target)
                 }
                 Ptr::ArrayAccess { index } => {
+                    builder.set_mem_field_size(hint.size);
+                    let (offset, field_size) = builder.take_mem_access();
+
                     let array_ptr_target = ctx.counter.next();
-                    let ptr = build_ir_expr(expr, ctx, builder);
+                    let array_ptr = build_ir_expr(expr, ctx, builder);
                     let index = build_ir_expr(index, ctx, builder);
 
                     builder.push_instruction(SsaInstruction::CalcArrayPtr {
                         target: array_ptr_target,
-                        ptr,
+                        ptr: array_ptr,
                         index,
                         struct_size: hint.size,
                     });
 
                     let target = ctx.counter.next();
 
-                    builder.push_mem_access(target, SsaValue::Register(array_ptr_target));
+                    builder.push_instruction(SsaInstruction::MemGet {
+                        target,
+                        source_ptr: SsaValue::Register(array_ptr_target),
+                        offset,
+                        field_size,
+                    });
 
                     SsaValue::Register(target)
                 }
                 Ptr::PtrDeref => {
-                    builder.set_mem_field_size(hint.size);
+                    builder.set_mem_field_size(hint.size.try_into().unwrap());
+                    let (offset, field_size) = builder.take_mem_access();
 
                     let target = ctx.counter.next();
                     let ptr = build_ir_expr(expr, ctx, builder);
 
-                    builder.push_mem_access(target, ptr);
+                    builder.push_instruction(SsaInstruction::MemGet {
+                        target,
+                        source_ptr: ptr,
+                        offset,
+                        field_size,
+                    });
 
                     SsaValue::Register(target)
                 }

@@ -3,9 +3,9 @@ use std::{
     mem::swap,
 };
 
-use crate::ssa::{
+use crate::{compile::ByteSize, ssa::{
     basic_block::{BasicBlock, BasicBlockEnd, BlockLabel}, counter::Counter, ir_graph::IrGraph, SsaInstruction, SsaValue, VirtualRegister
-};
+}};
 
 use super::{AssignPhi, ConBasicBlock, PhiAssignment};
 
@@ -152,7 +152,7 @@ pub struct BlockBuilder<'a> {
     block: ConBasicBlock<'a, ()>,
     is_closed: bool,
     current_mem_access_offset: usize,
-    current_mem_access_field_size: Option<usize>,
+    current_mem_access_field_size: Option<ByteSize>,
 }
 
 impl<'a> BlockBuilder<'a> {
@@ -198,23 +198,24 @@ impl<'a> BlockBuilder<'a> {
 
     pub fn set_mem_field_size(&mut self, size: usize) {
         if self.current_mem_access_field_size.is_none() {
-            self.current_mem_access_field_size = Some(size);
+            self.current_mem_access_field_size = Some(size.try_into().unwrap());
         }
     }
 
-    pub fn push_mem_access(&mut self, target: VirtualRegister<'a>, ptr: SsaValue<'a>) {
-        let offset = self.current_mem_access_offset;
-        self.current_mem_access_offset = 0;
-        let field_size = self.current_mem_access_field_size.take().unwrap();
-
-        self.push_instruction(SsaInstruction::MemGet { target, source_ptr: ptr, offset, field_size });
+    /// returns (offset, size)
+    pub fn take_mem_access(&mut self) -> (usize, ByteSize) {
+        (self.take_mem_offset(), self.take_field_size())
     }
 
-    pub fn take_mem_offset(&mut self) -> usize {
+    fn take_mem_offset(&mut self) -> usize {
         let offset = self.current_mem_access_offset;
         self.current_mem_access_offset = 0;
 
         offset
+    }
+
+    fn take_field_size(&mut self) -> ByteSize {
+        self.current_mem_access_field_size.take().unwrap()
     }
 
 }

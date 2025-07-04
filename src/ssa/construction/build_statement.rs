@@ -1,4 +1,5 @@
 use crate::{
+    compile::ByteSize,
     parser::{Lvalue, Ptr, Statement},
     ssa::{SsaInstruction, SsaValue, VirtualRegister, basic_block::BasicBlockEnd},
 };
@@ -272,7 +273,7 @@ pub enum LvalueTarget<'a> {
     Ptr {
         target: VirtualRegister<'a>,
         offset: usize,
-        field_size: usize,
+        field_size: ByteSize,
     },
 }
 
@@ -292,35 +293,29 @@ pub fn build_lvalue_target<'a>(
             match ptr {
                 Ptr::FieldAccess { .. } => {
                     builder.add_mem_offset(hint.offset);
-                    let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
+                    builder.set_mem_field_size(hint.size);
 
-                    let offset = builder.take_mem_offset();
-
-                    (
-                        LvalueTarget::Ptr {
-                            target: ptr,
-                            offset: offset,
-                            field_size: hint.size,
-                        },
-                        ident,
-                    )
+                    build_lvalue_target(&lvalue, ctx, builder)
                 }
                 Ptr::PtrFieldAccess { .. } => {
                     builder.add_mem_offset(hint.offset);
-                    let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
+                    builder.set_mem_field_size(hint.size);
+                    let (offset, field_size) = builder.take_mem_access();
 
-                    let offset = builder.take_mem_offset();
+                    let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
 
                     (
                         LvalueTarget::Ptr {
                             target: ptr,
                             offset: offset,
-                            field_size: hint.size,
+                            field_size,
                         },
                         ident,
                     )
                 }
                 Ptr::ArrayAccess { index } => {
+                    let (offset, field_size) = builder.take_mem_access();
+
                     let array_ptr_target = ctx.counter.next();
                     let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
                     let index = build_ir_expr(index, ctx, builder);
@@ -332,27 +327,25 @@ pub fn build_lvalue_target<'a>(
                         struct_size: hint.size,
                     });
 
-                    let offset = builder.take_mem_offset();
-
                     (
                         LvalueTarget::Ptr {
                             target: array_ptr_target,
                             offset,
-                            field_size: hint.size,
+                            field_size,
                         },
                         ident,
                     )
                 }
                 Ptr::PtrDeref => {
-                    let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
+                    let (offset, field_size) = builder.take_mem_access();
 
-                    let offset = builder.take_mem_offset();
+                    let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
 
                     (
                         LvalueTarget::Ptr {
                             target: ptr,
                             offset,
-                            field_size: hint.size,
+                            field_size,
                         },
                         ident,
                     )
@@ -383,42 +376,65 @@ pub fn build_lvalue<'a>(
             match ptr {
                 Ptr::FieldAccess { .. } => {
                     builder.add_mem_offset(hint.offset);
+                    builder.set_mem_field_size(hint.size);
 
                     build_lvalue(&lvalue, ctx, builder)
                 }
                 Ptr::PtrFieldAccess { .. } => {
                     builder.add_mem_offset(hint.offset);
+                    builder.set_mem_field_size(hint.size);
+                    let (offset, field_size) = builder.take_mem_access();
 
                     let target = ctx.counter.next();
                     let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
 
-                    builder.push_mem_access(target, SsaValue::Register(ptr));
+                    builder.push_instruction(SsaInstruction::MemGet {
+                        target,
+                        source_ptr: SsaValue::Register(ptr),
+                        offset,
+                        field_size,
+                    });
 
                     (target, ident)
                 }
                 Ptr::ArrayAccess { index } => {
+                    builder.set_mem_field_size(hint.size);
+                    let (offset, field_size) = builder.take_mem_access();
+
                     let array_ptr_target = ctx.counter.next();
-                    let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
+                    let (array_ptr, ident) = build_lvalue(&lvalue, ctx, builder);
                     let index = build_ir_expr(index, ctx, builder);
 
                     builder.push_instruction(SsaInstruction::CalcArrayPtr {
                         target: array_ptr_target,
-                        ptr: SsaValue::Register(ptr),
+                        ptr: SsaValue::Register(array_ptr),
                         index,
                         struct_size: hint.size,
                     });
 
                     let target = ctx.counter.next();
 
-                    builder.push_mem_access(target, SsaValue::Register(array_ptr_target));
+                    builder.push_instruction(SsaInstruction::MemGet {
+                        target,
+                        source_ptr: SsaValue::Register(array_ptr_target),
+                        offset,
+                        field_size,
+                    });
 
                     (target, ident)
                 }
                 Ptr::PtrDeref => {
+                    let (offset, field_size) = builder.take_mem_access();
+
                     let target = ctx.counter.next();
                     let (ptr, ident) = build_lvalue(&lvalue, ctx, builder);
 
-                    builder.push_mem_access(target, SsaValue::Register(ptr));
+                    builder.push_instruction(SsaInstruction::MemGet {
+                        target,
+                        source_ptr: SsaValue::Register(ptr),
+                        offset,
+                        field_size,
+                    });
 
                     (target, ident)
                 }

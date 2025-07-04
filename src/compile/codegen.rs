@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     compile::{
-        instruction::{BuiltinFuntion, FunctionPointer}, register::Register64, value::{Value, Value64}
+        instruction::{BuiltinFuntion, FunctionPointer}, value::{Value}
     },
     lexer::{BinaryOperator, UnaryOperator},
     parser::FunctionIdent,
@@ -11,8 +11,7 @@ use crate::{
 };
 
 use super::{
-    Register,
-    instruction::{CompareOp, Instruction},
+    instruction::{CompareOp, Instruction}, register::NumRegister, Register
 };
 
 pub fn generate_asm<'a>(
@@ -24,7 +23,7 @@ pub fn generate_asm<'a>(
 ) -> Vec<Instruction<'a>> {
     let mut instructions = Vec::new();
 
-    let max_register = registers.values().max().cloned().unwrap_or_default();
+    let max_register = registers.values().max().cloned().unwrap_or(Register::Num(NumRegister::Temp));
 
     for block in &func.graph {
         if !visited_blocks.contains(&block.label) {
@@ -64,63 +63,63 @@ pub fn generate_asm<'a>(
 
                     instructions.push(Instruction::Move {
                         src: a,
-                        dst: Register::Temp,
+                        dst: Register::Num(NumRegister::Temp),
                     });
                     let mut move_dst = true;
                     match op {
                         BinaryOperator::Plus => instructions.push(Instruction::Add {
-                            reg: Register::Temp,
+                            reg: Register::Num(NumRegister::Temp),
                             value: b,
                         }),
                         BinaryOperator::Minus => instructions.push(Instruction::Sub {
-                            reg: Register::Temp,
+                            reg: Register::Num(NumRegister::Temp),
                             value: b,
                         }),
                         BinaryOperator::Mul => instructions.push(Instruction::Mul {
-                            reg: Register::Temp,
+                            reg: Register::Num(NumRegister::Temp),
                             value: b,
                         }),
                         BinaryOperator::Div => instructions.push(Instruction::Div {
-                            reg: Register::Temp,
+                            reg: Register::Num(NumRegister::Temp),
                             value: b,
                         }),
                         BinaryOperator::Mod => instructions.push(Instruction::Mod {
-                            reg: Register::Temp,
+                            reg: Register::Num(NumRegister::Temp),
                             value: b,
                         }),
                         BinaryOperator::LogicAnd => instructions.push(Instruction::BitAnd {
-                            reg: Register::Temp,
+                            reg: Register::Num(NumRegister::Temp),
                             value: b,
                         }),
                         BinaryOperator::LogicOr => instructions.push(Instruction::BitOr {
-                            reg: Register::Temp,
+                            reg: Register::Num(NumRegister::Temp),
                             value: b,
                         }),
                         BinaryOperator::BitAnd => instructions.push(Instruction::BitAnd {
-                            reg: Register::Temp,
+                            reg: Register::Num(NumRegister::Temp),
                             value: b,
                         }),
                         BinaryOperator::BitOr => instructions.push(Instruction::BitOr {
-                            reg: Register::Temp,
+                            reg: Register::Num(NumRegister::Temp),
                             value: b,
                         }),
                         BinaryOperator::BitXor => instructions.push(Instruction::BitXor {
-                            reg: Register::Temp,
+                            reg: Register::Num(NumRegister::Temp),
                             value: b,
                         }),
                         BinaryOperator::ShiftLeft => instructions.push(Instruction::ShiftLeft {
-                            reg: Register::Temp,
+                            reg: Register::Num(NumRegister::Temp),
                             value: b,
                         }),
                         BinaryOperator::ShiftRight => instructions.push(Instruction::ShiftRight {
-                            reg: Register::Temp,
+                            reg: Register::Num(NumRegister::Temp),
                             value: b,
                         }),
                         BinaryOperator::Less => {
                             instructions.push(Instruction::Compare {
                                 op: CompareOp::Less,
                                 target: dst,
-                                a: Register::Temp,
+                                a: Register::Num(NumRegister::Temp),
                                 b,
                             });
                             move_dst = false;
@@ -129,7 +128,7 @@ pub fn generate_asm<'a>(
                             instructions.push(Instruction::Compare {
                                 op: CompareOp::LessEq,
                                 target: dst,
-                                a: Register::Temp,
+                                a: Register::Num(NumRegister::Temp),
                                 b,
                             });
                             move_dst = false;
@@ -138,7 +137,7 @@ pub fn generate_asm<'a>(
                             instructions.push(Instruction::Compare {
                                 op: CompareOp::Greater,
                                 target: dst,
-                                a: Register::Temp,
+                                a: Register::Num(NumRegister::Temp),
                                 b,
                             });
                             move_dst = false;
@@ -147,7 +146,7 @@ pub fn generate_asm<'a>(
                             instructions.push(Instruction::Compare {
                                 op: CompareOp::GreaterEq,
                                 target: dst,
-                                a: Register::Temp,
+                                a: Register::Num(NumRegister::Temp),
                                 b,
                             });
                             move_dst = false;
@@ -156,7 +155,7 @@ pub fn generate_asm<'a>(
                             instructions.push(Instruction::Compare {
                                 op: CompareOp::Equals,
                                 target: dst,
-                                a: Register::Temp,
+                                a: Register::Num(NumRegister::Temp),
                                 b,
                             });
                             move_dst = false;
@@ -165,7 +164,7 @@ pub fn generate_asm<'a>(
                             instructions.push(Instruction::Compare {
                                 op: CompareOp::NotEquals,
                                 target: dst,
-                                a: Register::Temp,
+                                a: Register::Num(NumRegister::Temp),
                                 b,
                             });
                             move_dst = false;
@@ -173,7 +172,7 @@ pub fn generate_asm<'a>(
                     }
                     if move_dst {
                         instructions.push(Instruction::Move {
-                            src: Register::Temp.into(),
+                            src: NumRegister::Temp.into(),
                             dst,
                         });
                     }
@@ -266,12 +265,12 @@ pub fn generate_asm<'a>(
                     let index = transform_value(index, registers);
                     instructions.push(Instruction::CheckArrayLen { array_ptr, index });
 
-                    instructions.push(Instruction::Move { src: index, dst: Register::Temp });
-                    instructions.push(Instruction::Mul { reg: Register::Temp, value: Value::Immediate(*struct_size as i32) });
-                    instructions.push(Instruction::Add64 { reg: Register64::Temp, value: Value64::Immediate(*struct_size as i32) });
+                    instructions.push(Instruction::Move { src: index, dst: Register::Num(NumRegister::Temp) });
+                    instructions.push(Instruction::Mul { reg: Register::Num(NumRegister::Temp), value: Value::Immediate(*struct_size as i32) });
+                    instructions.push(Instruction::Add64 { reg: Register::Num(NumRegister::Temp), value: array_ptr });
 
                     let target = registers[target];
-                    instructions.push(Instruction::Move64 { src: Value64::Register(Register64::Temp), dst: target.into() });
+                    instructions.push(Instruction::Move { src: Value::Register(Register::Num(NumRegister::Temp)), dst: target.into() });
 
                 },
                 SsaInstruction::FunctionArg { .. } => (),
@@ -298,9 +297,9 @@ pub fn generate_asm<'a>(
                     value @ Value::Immediate(_) => {
                         instructions.push(Instruction::Move {
                             src: value,
-                            dst: Register::Temp,
+                            dst: Register::Num(NumRegister::Temp),
                         });
-                        Register::Temp
+                        Register::Num(NumRegister::Temp)
                     }
                 };
                 instructions.push(Instruction::JumpConditional {

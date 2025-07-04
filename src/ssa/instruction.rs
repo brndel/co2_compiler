@@ -1,9 +1,7 @@
 use std::fmt::Display;
 
 use crate::{
-    core::Type,
-    lexer::{BinaryOperator, UnaryOperator},
-    parser::FunctionIdent,
+    compile::ByteSize, core::Type, lexer::{BinaryOperator, UnaryOperator}, parser::FunctionIdent
 };
 
 use super::register::VirtualRegister;
@@ -47,13 +45,13 @@ pub enum SsaInstruction<'a> {
         target: VirtualRegister<'a>,
         source_ptr: SsaValue<'a>,
         offset: usize,
-        field_size: usize
+        field_size: ByteSize
     },
     MemSet {
         target_ptr: VirtualRegister<'a>,
         source: SsaValue<'a>,
         offset: usize,
-        field_size: usize
+        field_size: ByteSize
     },
     CalcArrayPtr {
         target: VirtualRegister<'a>,

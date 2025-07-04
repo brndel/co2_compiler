@@ -1,14 +1,17 @@
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 
 use crate::{
     compile::{
-        Register,
-        register::{FunctionArgRegister, NumRegister64, Register64, StackRegister, SystemRegister},
-        value::{Value, Value64},
+        ByteSize, Register,
+        byte_size::WithByteSizeExt,
+        register::{FunctionArgRegister, StackRegister, SystemRegister},
+        value::Value,
     },
     ssa::{BlockLabel, SsaValue},
     util::align_bytes,
 };
+
+use super::{byte_size::WithByteSize, register::NumRegister};
 
 #[derive(Debug)]
 pub enum Instruction<'a> {
@@ -16,17 +19,13 @@ pub enum Instruction<'a> {
         src: Value,
         dst: Register,
     },
-    Move64 {
-        src: Value64,
-        dst: Register64,
-    },
     Add {
         reg: Register,
         value: Value,
     },
     Add64 {
-        reg: Register64,
-        value: Value64,
+        reg: Register,
+        value: Value,
     },
     Sub {
         reg: Register,
@@ -118,13 +117,13 @@ pub enum Instruction<'a> {
         target: Register,
         source_ptr: Value,
         offset: usize,
-        field_size: usize,
+        field_size: ByteSize,
     },
     MemSet {
         target_ptr: Register,
         source: Value,
         offset: usize,
-        field_size: usize,
+        field_size: ByteSize,
     },
     CheckArrayLen {
         array_ptr: Value,
@@ -181,37 +180,41 @@ impl<'a> Display for Instruction<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Instruction::Move { src, dst } => {
-                if src == dst {
-                    Ok(())
+                let size = if src.is_immediate() {
+                    ByteSize::B4
                 } else {
-                    match (&src, &dst) {
-                        (Value::Register(Register::Stack(_)), Register::Stack(_)) => {
-                            writeln!(f, "movl {}, {}", src, Register::Temp)?;
-                            write!(f, "movl {}, {}", Register::Temp, dst)
-                        }
-                        _ => {
-                            write!(f, "movl {}, {}", src, dst)
-                        }
-                    }
-                }
-            }
-            Instruction::Move64 { src, dst } => {
-                if src == dst {
-                    Ok(())
+                    ByteSize::B8
+                };
+
+                if src.is_stack() && dst.is_stack() {
+                    writeln!(
+                        f,
+                        "mov {}, {}",
+                        src.with_size(size),
+                        NumRegister::Temp.with_size(size)
+                    )?;
+                    write!(
+                        f,
+                        "mov {}, {}",
+                        NumRegister::Temp.with_size(size),
+                        dst.with_size(size)
+                    )
                 } else {
-                    match (&src, &dst) {
-                        (Value64::Register(Register64::Stack(_)), Register64::Stack(_)) => {
-                            writeln!(f, "mov {}, {}", src, Register64::Temp)?;
-                            write!(f, "mov {}, {}", Register64::Temp, dst)
-                        }
-                        _ => {
-                            write!(f, "mov {}, {}", src, dst)
-                        }
-                    }
+                    write!(
+                        f,
+                        "mov {}, {}",
+                        src.with_size(size),
+                        dst.with_size(size)
+                    )
                 }
             }
             Instruction::Add { reg, value } => write!(f, "addl {}, {}", value, reg),
-            Instruction::Add64 { reg, value } => write!(f, "add {}, {}", value, reg),
+            Instruction::Add64 { reg, value } => write!(
+                f,
+                "add {}, {}",
+                value.with_size(ByteSize::B8),
+                reg.with_size(ByteSize::B8)
+            ),
             Instruction::Sub { reg, value } => write!(f, "subl {}, {}", value, reg),
             Instruction::Mul { reg, value } => write!(f, "imul {}, {}", value, reg),
             Instruction::Div { reg, value } => {
@@ -300,13 +303,13 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(f, "push %rbp")?;
                 writeln!(f, "mov %rsp, %rbp")?;
 
-                writeln!(f, "push {}", NumRegister64::R12)?;
-                writeln!(f, "push {}", NumRegister64::R13)?;
-                writeln!(f, "push {}", NumRegister64::R14)?;
-                writeln!(f, "push {}", NumRegister64::R15)?;
+                writeln!(f, "push {}", NumRegister::R12.with_size(ByteSize::B8))?;
+                writeln!(f, "push {}", NumRegister::R13.with_size(ByteSize::B8))?;
+                writeln!(f, "push {}", NumRegister::R14.with_size(ByteSize::B8))?;
+                writeln!(f, "push {}", NumRegister::R15.with_size(ByteSize::B8))?;
 
                 if let Register::Stack(StackRegister(registers)) = *max_register {
-                    let bytes = align_bytes(registers * 4, 16);
+                    let bytes = align_bytes(registers * 8, 16);
 
                     writeln!(f, "sub {}, %rsp", Value::Immediate(bytes as i32))?;
                 }
@@ -314,10 +317,20 @@ impl<'a> Display for Instruction<'a> {
                 for (idx, target) in params.iter().enumerate() {
                     let param_reg = FunctionArgRegister::get(idx);
                     if let &Register::Stack(_) = target {
-                        writeln!(f, "movl {}, {}", param_reg, Register::Temp)?;
-                        writeln!(f, "movl {}, {}", Register::Temp, target)?;
+                        writeln!(
+                            f,
+                            "mov {}, {}",
+                            param_reg,
+                            NumRegister::Temp.with_size(ByteSize::B8)
+                        )?;
+                        writeln!(
+                            f,
+                            "mov {}, {}",
+                            NumRegister::Temp.with_size(ByteSize::B8),
+                            target.with_size(ByteSize::B8)
+                        )?;
                     } else {
-                        writeln!(f, "movl {}, {}", param_reg, target)?;
+                        writeln!(f, "mov {}, {}", param_reg, target)?;
                     }
                 }
 
@@ -335,21 +348,26 @@ impl<'a> Display for Instruction<'a> {
                     writeln!(f, "add {}, %rsp", Value::Immediate(bytes as i32))?;
                 }
 
-                writeln!(f, "mov {}, {}", value, SystemRegister::Eax)?;
+                writeln!(
+                    f,
+                    "mov {}, {}",
+                    value.with_size(ByteSize::B8),
+                    SystemRegister::Eax.with_size(ByteSize::B8)
+                )?;
 
-                writeln!(f, "pop {}", NumRegister64::R15)?;
-                writeln!(f, "pop {}", NumRegister64::R14)?;
-                writeln!(f, "pop {}", NumRegister64::R13)?;
-                writeln!(f, "pop {}", NumRegister64::R12)?;
+                writeln!(f, "pop {}", NumRegister::R15.with_size(ByteSize::B8))?;
+                writeln!(f, "pop {}", NumRegister::R14.with_size(ByteSize::B8))?;
+                writeln!(f, "pop {}", NumRegister::R13.with_size(ByteSize::B8))?;
+                writeln!(f, "pop {}", NumRegister::R12.with_size(ByteSize::B8))?;
 
                 writeln!(f, "leave")?;
                 writeln!(f, "ret")
             }
             Instruction::CallFunction { dst, func, params } => {
-                writeln!(f, "push {}", Register64::Temp)?;
-                writeln!(f, "push {}", NumRegister64::R9)?;
-                writeln!(f, "push {}", NumRegister64::R10)?;
-                writeln!(f, "push {}", NumRegister64::R11)?;
+                writeln!(f, "push {}", Register::Num(NumRegister::Temp))?;
+                writeln!(f, "push {}", NumRegister::R9.with_size(ByteSize::B8))?;
+                writeln!(f, "push {}", NumRegister::R10.with_size(ByteSize::B8))?;
+                writeln!(f, "push {}", NumRegister::R11.with_size(ByteSize::B8))?;
 
                 match func {
                     FunctionPointer::User { label } => {
@@ -359,10 +377,20 @@ impl<'a> Display for Instruction<'a> {
                         for (idx, param) in params.iter().enumerate() {
                             let target = FunctionArgRegister::set(idx);
                             if let &Value::Register(Register::Stack(_)) = param {
-                                writeln!(f, "movl {}, {}", param, Register::Temp)?;
-                                writeln!(f, "movl {}, {}", Register::Temp, target)?;
+                                writeln!(
+                                    f,
+                                    "mov {}, {}",
+                                    param,
+                                    NumRegister::Temp.with_size(ByteSize::B8)
+                                )?;
+                                writeln!(
+                                    f,
+                                    "mov {}, {}",
+                                    NumRegister::Temp.with_size(ByteSize::B8),
+                                    target
+                                )?;
                             } else {
-                                writeln!(f, "movl {}, {}", param, target)?;
+                                writeln!(f, "mov {}, {}", param.with_size(ByteSize::B8), target)?;
                             }
                         }
 
@@ -388,10 +416,10 @@ impl<'a> Display for Instruction<'a> {
                     },
                 }
 
-                writeln!(f, "pop {}", NumRegister64::R11)?;
-                writeln!(f, "pop {}", NumRegister64::R10)?;
-                writeln!(f, "pop {}", NumRegister64::R9)?;
-                writeln!(f, "pop {}", Register64::Temp)?;
+                writeln!(f, "pop {}", NumRegister::R11.with_size(ByteSize::B8))?;
+                writeln!(f, "pop {}", NumRegister::R10.with_size(ByteSize::B8))?;
+                writeln!(f, "pop {}", NumRegister::R9.with_size(ByteSize::B8))?;
+                writeln!(f, "pop {}", NumRegister::Temp.with_size(ByteSize::B8))?;
                 if let Some(dst) = dst {
                     writeln!(f, "mov {}, {}", SystemRegister::Eax, dst)?
                 }
@@ -403,35 +431,50 @@ impl<'a> Display for Instruction<'a> {
                 dst,
                 array_len,
             } => {
-                writeln!(f, "push {}", Register64::Temp)?;
-                writeln!(f, "push {}", NumRegister64::R9)?;
-                writeln!(f, "push {}", NumRegister64::R10)?;
-                writeln!(f, "push {}", NumRegister64::R11)?;
+                writeln!(f, "push {}", NumRegister::Temp.with_size(ByteSize::B8))?;
+                writeln!(f, "push {}", NumRegister::R9.with_size(ByteSize::B8))?;
+                writeln!(f, "push {}", NumRegister::R10.with_size(ByteSize::B8))?;
+                writeln!(f, "push {}", NumRegister::R11.with_size(ByteSize::B8))?;
 
                 if let Some(len) = array_len {
                     let byte_count = byte_count + 8;
 
-                    writeln!(f, "mov {}, %rdi", len)?;
-                    writeln!(f, "test %rdi, %rdi")?;
+                    writeln!(f, "movl {}, %edi", len)?;
+                    writeln!(f, "test %edi, %edi")?;
                     writeln!(f, "js call_abort")?;
                     writeln!(f, "mov {}, %rsi", Value::Immediate(byte_count as i32))?;
                     writeln!(f, "call calloc")?;
 
-                    writeln!(f, "mov {}, {}", len, SystemRegister::Eax)?;
-                    writeln!(f, "add {}, {}", Value::Immediate(8), SystemRegister::Eax)?;
+                    writeln!(
+                        f,
+                        "add {}, {}",
+                        Value::Immediate(8),
+                        SystemRegister::Eax.with_size(ByteSize::B8)
+                    )?;
+                    writeln!(
+                        f,
+                        "movl {}, -8({})",
+                        len,
+                        SystemRegister::Eax.with_size(ByteSize::B8)
+                    )?;
                 } else {
-                    writeln!(f, "mov {}, %rdi", Value::Immediate(1))?;
+                    writeln!(f, "movl {}, %edi", Value::Immediate(1))?;
                     writeln!(f, "mov {}, %rsi", Value::Immediate(*byte_count as i32))?;
                     writeln!(f, "call calloc")?;
                 }
 
-                writeln!(f, "pop {}", NumRegister64::R11)?;
-                writeln!(f, "pop {}", NumRegister64::R10)?;
-                writeln!(f, "pop {}", NumRegister64::R9)?;
-                writeln!(f, "pop {}", Register64::Temp)?;
+                writeln!(f, "pop {}", NumRegister::R11.with_size(ByteSize::B8))?;
+                writeln!(f, "pop {}", NumRegister::R10.with_size(ByteSize::B8))?;
+                writeln!(f, "pop {}", NumRegister::R9.with_size(ByteSize::B8))?;
+                writeln!(f, "pop {}", NumRegister::Temp.with_size(ByteSize::B8))?;
 
                 if let Some(dst) = dst {
-                    writeln!(f, "mov {}, {}", SystemRegister::Eax, dst)?
+                    writeln!(
+                        f,
+                        "mov {}, {}",
+                        SystemRegister::Eax.with_size(ByteSize::B8),
+                        dst.with_size(ByteSize::B8)
+                    )?
                 }
 
                 Ok(())
@@ -442,31 +485,17 @@ impl<'a> Display for Instruction<'a> {
                 offset,
                 field_size,
             } => {
-                if source_ptr.is_stack() {
-                    writeln!(f, "movq {} {}", source_ptr, SystemRegister::Eax)?;
+                let source_ptr =
+                    ensure_ptr_not_on_stack(*source_ptr, Register::System(SystemRegister::Eax), f)?;
 
-                    match field_size {
-                        1 => writeln!(f, "movb {}({}), {}", offset, SystemRegister::Eax, target)?,
-                        4 => writeln!(f, "movl {}({}), {}", offset, SystemRegister::Eax, target)?,
-                        8 => writeln!(
-                            f,
-                            "movq {}({}), {}",
-                            offset,
-                            SystemRegister::Eax,
-                            target.to_64()
-                        )?,
-                        _ => unreachable!(),
-                    }
-                } else {
-                    match field_size {
-                        1 => writeln!(f, "movb {}({}), {}", offset, source_ptr, target)?,
-                        4 => writeln!(f, "movl {}({}), {}", offset, source_ptr, target)?,
-                        8 => writeln!(f, "movq {}({}), {}", offset, source_ptr, target.to_64())?,
-                        _ => unreachable!(),
-                    }
-                }
-
-                Ok(())
+                write!(
+                    f,
+                    "{} {}({}), {}",
+                    MoveInstr.with_size(*field_size),
+                    offset,
+                    source_ptr.with_size(ByteSize::B8),
+                    target.with_size(*field_size)
+                )
             }
             Instruction::MemSet {
                 target_ptr,
@@ -474,44 +503,74 @@ impl<'a> Display for Instruction<'a> {
                 offset,
                 field_size,
             } => {
-                if target_ptr.is_stack() {
-                    writeln!(f, "movq {}, {}", target_ptr, SystemRegister::Eax)?;
+                let target_ptr = ensure_ptr_not_on_stack(
+                    Value::Register(*target_ptr),
+                    Register::System(SystemRegister::Eax),
+                    f,
+                )?;
 
-                    match field_size {
-                        1 => writeln!(f, "movb {}, {}({})", source, offset, SystemRegister::Eax)?,
-                        4 => writeln!(f, "movl {}, {}({})", source, offset, SystemRegister::Eax)?,
-                        8 => writeln!(f, "movq {}, {}({})", source, offset, SystemRegister::Eax,)?,
-                        _ => unreachable!(),
-                    }
-                } else {
-                    match field_size {
-                        1 => writeln!(f, "movb {}, {}({})", source, offset, target_ptr)?,
-                        4 => writeln!(f, "movl {}, {}({})", source, offset, target_ptr)?,
-                        8 => writeln!(f, "movq {}, {}({})", source, offset, target_ptr,)?,
-                        _ => unreachable!(),
-                    }
-                }
-
-                Ok(())
+                write!(
+                    f,
+                    "{} {}, {}({})",
+                    MoveInstr.with_size(*field_size),
+                    source.with_size(*field_size),
+                    offset,
+                    target_ptr.with_size(ByteSize::B8)
+                )
             }
             Instruction::CheckArrayLen { array_ptr, index } => {
-                if array_ptr.is_stack() {
-                    writeln!(f, "movq {}, {}", array_ptr, SystemRegister::Eax)?;
-                    writeln!(f, "movq -8({}), {}", SystemRegister::Eax, SystemRegister::Eax)?;
-                } else {
-                    writeln!(f, "movq -8({}), {}", array_ptr, SystemRegister::Eax)?;
-                }
+                let array_ptr =
+                    ensure_ptr_not_on_stack(*array_ptr, Register::System(SystemRegister::Eax), f)?;
+
+                writeln!(f, "# check array index {} of array at {}", index, array_ptr)?;
+                writeln!(
+                    f,
+                    "movl -8({}), {}",
+                    array_ptr.with_size(ByteSize::B8),
+                    SystemRegister::Eax
+                )?;
 
                 writeln!(f, "test {}, {}", SystemRegister::Eax, SystemRegister::Eax)?;
                 writeln!(f, "js call_abort")?;
-                
-                writeln!(f, "test {}, {}", SystemRegister::Eax, index)?;
-                writeln!(f, "jae call_abort")?;
 
+                writeln!(f, "cmp {}, {}", index, SystemRegister::Eax)?;
+                writeln!(f, "jl call_abort")?;
 
                 Ok(())
-            },
+            }
             Instruction::GlobalLabel { label } => write!(f, ".global {}", label),
+        }
+    }
+}
+
+fn ensure_ptr_not_on_stack(
+    ptr: Value,
+    register: Register,
+    f: &mut Formatter<'_>,
+) -> Result<Value, std::fmt::Error> {
+    if ptr.is_stack() {
+        writeln!(
+            f,
+            "movq {}, {}",
+            ptr.with_size(ByteSize::B8),
+            register.with_size(ByteSize::B8)
+        )?;
+        Ok(Value::Register(register))
+    } else {
+        Ok(ptr)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct MoveInstr;
+
+impl Display for WithByteSize<MoveInstr> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.size {
+            ByteSize::B1 => write!(f, "movb"),
+            ByteSize::B2 => write!(f, "movw"),
+            ByteSize::B4 => write!(f, "movl"),
+            ByteSize::B8 => write!(f, "movq"),
         }
     }
 }

@@ -2,6 +2,8 @@ mod codegen;
 mod instruction;
 mod register;
 mod value;
+mod byte_size;
+pub use byte_size::ByteSize;
 
 pub use codegen::generate_asm;
 pub use register::Register;
@@ -48,6 +50,10 @@ pub fn compile_code(output: impl AsRef<Path>, instructions: Vec<Instruction>, bu
 
         #[cfg(debug_assertions)]
         {
+            if !gcc_status.success() {
+                println!("GCC FAILED, not running binary");
+                return;
+            }
             // Only execute the program in debug mode
             let status = Command::new(ouput_file_path)
                 .output()
