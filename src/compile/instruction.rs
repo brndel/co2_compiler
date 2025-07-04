@@ -531,7 +531,7 @@ impl<'a> Display for Instruction<'a> {
                 )?;
 
                 if is_stack {
-                    write!(f, "{} {}, {}", MoveInstr.with_size(*field_size), target, real_target)?;
+                    write!(f, "{} {}, {}", MoveInstr.with_size(*field_size), target.with_size(*field_size), real_target)?;
                 }
 
                 Ok(())
@@ -543,7 +543,7 @@ impl<'a> Display for Instruction<'a> {
                 field_size,
             } => {
                 let source = if source.is_stack() {
-                    writeln!(f, "{} {}, {}", MoveInstr.with_size(*field_size), source.with_size(*field_size), SystemRegister::Ebx)?;
+                    writeln!(f, "{} {}, {}", MoveInstr.with_size(*field_size), source.with_size(*field_size), SystemRegister::Ebx.with_size(*field_size))?;
                     Value::Register(Register::System(SystemRegister::Ebx))
                 } else {
                     *source
