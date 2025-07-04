@@ -364,7 +364,7 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(f, "ret")
             }
             Instruction::CallFunction { dst, func, params } => {
-                writeln!(f, "push {}", Register::Num(NumRegister::Temp))?;
+                writeln!(f, "push {}", Register::Num(NumRegister::Temp).with_size(ByteSize::B8))?;
                 writeln!(f, "push {}", NumRegister::R9.with_size(ByteSize::B8))?;
                 writeln!(f, "push {}", NumRegister::R10.with_size(ByteSize::B8))?;
                 writeln!(f, "push {}", NumRegister::R11.with_size(ByteSize::B8))?;
