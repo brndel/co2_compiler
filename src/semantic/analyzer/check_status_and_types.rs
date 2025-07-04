@@ -598,7 +598,11 @@ fn check_binary_type<'a>(
 
         return None;
     } else {
-        if a.0 != b.0 {
+        let nullptr_compare = {
+            a.0.is_ptr() && b.0.is_nullptr() || b.0.is_ptr() && a.0.is_nullptr()
+        };
+
+        if a.0 != b.0 && !nullptr_compare {
             errors.push(SemanticError::MissmatchedBinaryType { a, b });
             None
         } else {

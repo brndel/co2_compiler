@@ -38,6 +38,14 @@ impl<'src> Type<'src> {
         }
     }
 
+
+    pub fn is_nullptr(&self) -> bool {
+        match self {
+            Type::NullPtr => true,
+            _ => false,
+        }
+    }
+
     pub fn can_assign(&self, other: &Self) -> bool {
         self == other || self.is_ptr() && other == &Type::NullPtr
     }
