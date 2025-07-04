@@ -562,10 +562,18 @@ impl<'a> Display for Instruction<'a> {
                 )
             }
             Instruction::CheckArrayLen { array_ptr, index } => {
+                
+                writeln!(f, "# check array index {} of array at {}", index, array_ptr)?;
+                
+                // idx < 0
+                writeln!(f, "movl {}, {}", index.with_size(ByteSize::B4), SystemRegister::Eax.with_size(ByteSize::B4))?;
+
+                writeln!(f, "test {}, {}", SystemRegister::Eax, SystemRegister::Eax)?;
+                writeln!(f, "js call_abort")?;
+                
+                // idx >= len
                 let array_ptr =
                     ensure_ptr_not_on_stack(*array_ptr, Register::System(SystemRegister::Eax), f)?;
-
-                writeln!(f, "# check array index {} of array at {}", index, array_ptr)?;
                 writeln!(
                     f,
                     "movl -8({}), {}",
@@ -573,8 +581,6 @@ impl<'a> Display for Instruction<'a> {
                     SystemRegister::Eax
                 )?;
 
-                writeln!(f, "test {}, {}", SystemRegister::Eax, SystemRegister::Eax)?;
-                writeln!(f, "js call_abort")?;
 
                 writeln!(f, "cmp {}, {}", index, SystemRegister::Eax)?;
                 writeln!(f, "jle call_abort")?;
