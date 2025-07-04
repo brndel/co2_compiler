@@ -18,7 +18,7 @@ use compile::{Register, compile_code, generate_asm};
 use lexer::lexer;
 use parser::{ParseNum, program_parser};
 use program::Program;
-use register_alloc::{LivelinessContainer, LivelinessGraph};
+use register_alloc::{Line, LivelinessContainer, LivelinessGraph};
 use semantic::Analyzed;
 use ssa::FunctionIrGraph;
 
@@ -57,27 +57,57 @@ fn main() {
     #[cfg(debug_assertions)]
     println!("Semantic analyzer passed");
 
-    let func_graphs =  analyzed.program.take_functions().map(|func: program::FunctionDef<'_> | FunctionIrGraph::new(func)).collect::<Vec<_>>();
+    let func_graphs = analyzed
+        .program
+        .take_functions()
+        .map(|func: program::FunctionDef<'_>| FunctionIrGraph::new(func))
+        .collect::<Vec<_>>();
 
-    let func_labels = BTreeMap::from_iter(func_graphs.iter().map(|func| (func.name, func.start_label)));
+    let func_labels =
+        BTreeMap::from_iter(func_graphs.iter().map(|func| (func.name, func.start_label)));
 
     let mut assembly = Vec::new();
 
     for func in &func_graphs {
+
         #[cfg(debug_assertions)]
         for block in func.graph.iter() {
             println!("{}", block);
         }
-
+        
         let ir_graph = &func.graph;
 
         let live_container = LivelinessContainer::new(&ir_graph);
+
+        // Print blocks with liveliness information
+        // 
+        // #[cfg(debug_assertions)]
+        // for block in func.graph.iter() {
+        //     println!("{}:", block.label);
+        //     for (line, instr) in block.instructions.iter().enumerate() {
+        //         let live_set = live_container.get_live_set(&Line {
+        //             block: block.label,
+        //             line,
+        //         });
+        //         let line = format!("{:2}: {}", line, instr);
+        //         let live_set = live_set.iter().map(|reg| reg.to_string()).collect::<Vec<_>>();
+        //         let live_set = live_set.join(", ");
+        //         println!("{:<64} {}", line, live_set);
+        //     }
+        //     println!("{}", block.end);
+        // }
 
         let live_graph = LivelinessGraph::new(&ir_graph, &live_container);
 
         let registers = live_graph.greedy_coloring::<Register>();
 
-        let mut asm = generate_asm(func, &registers, live_graph.visited_blocks(), &func_labels, &analyzed.structs);
+        let mut asm = generate_asm(
+            func,
+            &registers,
+            live_graph.visited_blocks(),
+            &func_labels,
+            &analyzed.structs,
+        );
 
         assembly.append(&mut asm);
     }
