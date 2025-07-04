@@ -546,7 +546,7 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(f, "js call_abort")?;
 
                 writeln!(f, "cmp {}, {}", index, SystemRegister::Eax)?;
-                writeln!(f, "jl call_abort")?;
+                writeln!(f, "jle call_abort")?;
 
                 Ok(())
             }
