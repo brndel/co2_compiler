@@ -189,18 +189,26 @@ impl<'a> Display for Instruction<'a> {
                 if src.is_stack() && dst.is_stack() {
                     writeln!(
                         f,
-                        "mov {}, {}",
+                        "{} {}, {}",
+                        MoveInstr.with_size(size),
                         src.with_size(size),
                         NumRegister::Temp.with_size(size)
                     )?;
                     write!(
                         f,
-                        "mov {}, {}",
+                        "{} {}, {}",
+                        MoveInstr.with_size(size),
                         NumRegister::Temp.with_size(size),
                         dst.with_size(size)
                     )
                 } else {
-                    write!(f, "mov {}, {}", src.with_size(size), dst.with_size(size))
+                    write!(
+                        f,
+                        "{} {}, {}",
+                        MoveInstr.with_size(size),
+                        src.with_size(size),
+                        dst.with_size(size)
+                    )
                 }
             }
             Instruction::Add { reg, value } => write!(f, "addl {}, {}", value, reg),
@@ -433,7 +441,12 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(f, "pop {}", NumRegister::R9.with_size(ByteSize::B8))?;
                 writeln!(f, "pop {}", NumRegister::Temp.with_size(ByteSize::B8))?;
                 if let Some(dst) = dst {
-                    writeln!(f, "mov {}, {}", SystemRegister::Eax.with_size(ByteSize::B8), dst.with_size(ByteSize::B8))?
+                    writeln!(
+                        f,
+                        "mov {}, {}",
+                        SystemRegister::Eax.with_size(ByteSize::B8),
+                        dst.with_size(ByteSize::B8)
+                    )?
                 }
 
                 Ok(())
@@ -500,14 +513,25 @@ impl<'a> Display for Instruction<'a> {
                 let source_ptr =
                     ensure_ptr_not_on_stack(*source_ptr, Register::System(SystemRegister::Eax), f)?;
 
-                write!(
+                let is_stack = target.is_stack();
+
+                let real_target = target;
+                let target = if is_stack { Register::System(SystemRegister::Ebx) } else {*target};
+
+                writeln!(
                     f,
                     "{} {}({}), {}",
                     MoveInstr.with_size(*field_size),
                     offset,
                     source_ptr.with_size(ByteSize::B8),
                     target.with_size(*field_size)
-                )
+                )?;
+
+                if is_stack {
+                    write!(f, "{} {}, {}", MoveInstr.with_size(*field_size), target, real_target)?;
+                }
+
+                Ok(())
             }
             Instruction::MemSet {
                 target_ptr,
@@ -515,6 +539,13 @@ impl<'a> Display for Instruction<'a> {
                 offset,
                 field_size,
             } => {
+                let source = if source.is_stack() {
+                    writeln!(f, "{} {}, {}", MoveInstr.with_size(*field_size), source.with_size(*field_size), SystemRegister::Ebx)?;
+                    Value::Register(Register::System(SystemRegister::Ebx))
+                } else {
+                    *source
+                };
+
                 let target_ptr = ensure_ptr_not_on_stack(
                     Value::Register(*target_ptr),
                     Register::System(SystemRegister::Eax),
