@@ -314,6 +314,7 @@ pub fn build_lvalue_target<'a>(
                     )
                 }
                 Ptr::ArrayAccess { index } => {
+                    builder.set_mem_field_size(hint.size);
                     let (offset, field_size) = builder.take_mem_access();
 
                     let array_ptr_target = ctx.counter.next();

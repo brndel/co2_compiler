@@ -200,12 +200,7 @@ impl<'a> Display for Instruction<'a> {
                         dst.with_size(size)
                     )
                 } else {
-                    write!(
-                        f,
-                        "mov {}, {}",
-                        src.with_size(size),
-                        dst.with_size(size)
-                    )
+                    write!(f, "mov {}, {}", src.with_size(size), dst.with_size(size))
                 }
             }
             Instruction::Add { reg, value } => write!(f, "addl {}, {}", value, reg),
@@ -343,7 +338,7 @@ impl<'a> Display for Instruction<'a> {
                 // Free stack
                 if let Register::Stack(StackRegister(registers)) = *max_register {
                     // Align to nearest 16 byte value
-                    let bytes = (registers * 4 + 15) & !15;
+                    let bytes = (registers * 8 + 15) & !15;
 
                     writeln!(f, "add {}, %rsp", Value::Immediate(bytes as i32))?;
                 }
@@ -364,33 +359,50 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(f, "ret")
             }
             Instruction::CallFunction { dst, func, params } => {
-                writeln!(f, "push {}", Register::Num(NumRegister::Temp).with_size(ByteSize::B8))?;
+                writeln!(
+                    f,
+                    "push {}",
+                    Register::Num(NumRegister::Temp).with_size(ByteSize::B8)
+                )?;
                 writeln!(f, "push {}", NumRegister::R9.with_size(ByteSize::B8))?;
                 writeln!(f, "push {}", NumRegister::R10.with_size(ByteSize::B8))?;
                 writeln!(f, "push {}", NumRegister::R11.with_size(ByteSize::B8))?;
 
                 match func {
                     FunctionPointer::User { label } => {
-                        let param_bytes = (params.len() * 4 + 15) & !15;
+                        let param_bytes = (params.len() * 8 + 15) & !15;
                         writeln!(f, "sub {}, %rsp", Value::Immediate(param_bytes as i32))?;
 
                         for (idx, param) in params.iter().enumerate() {
                             let target = FunctionArgRegister::set(idx);
+                            let size = if param.is_immediate() {
+                                ByteSize::B4
+                            } else {
+                                ByteSize::B8
+                            };
                             if let &Value::Register(Register::Stack(_)) = param {
                                 writeln!(
                                     f,
-                                    "mov {}, {}",
+                                    "{} {}, {}",
+                                    MoveInstr.with_size(size),
                                     param,
-                                    NumRegister::Temp.with_size(ByteSize::B8)
+                                    NumRegister::Temp.with_size(size)
                                 )?;
                                 writeln!(
                                     f,
-                                    "mov {}, {}",
-                                    NumRegister::Temp.with_size(ByteSize::B8),
+                                    "{} {}, {}",
+                                    MoveInstr.with_size(size),
+                                    NumRegister::Temp.with_size(size),
                                     target
                                 )?;
                             } else {
-                                writeln!(f, "mov {}, {}", param.with_size(ByteSize::B8), target)?;
+                                writeln!(
+                                    f,
+                                    "{} {}, {}",
+                                    MoveInstr.with_size(size),
+                                    param.with_size(size),
+                                    target
+                                )?;
                             }
                         }
 
@@ -421,7 +433,7 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(f, "pop {}", NumRegister::R9.with_size(ByteSize::B8))?;
                 writeln!(f, "pop {}", NumRegister::Temp.with_size(ByteSize::B8))?;
                 if let Some(dst) = dst {
-                    writeln!(f, "mov {}, {}", SystemRegister::Eax, dst)?
+                    writeln!(f, "mov {}, {}", SystemRegister::Eax.with_size(ByteSize::B8), dst.with_size(ByteSize::B8))?
                 }
 
                 Ok(())

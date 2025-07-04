@@ -51,6 +51,7 @@ fn main() {
         exit(7);
     };
 
+    #[cfg(debug_assertions)]
     dbg!(&analyzed.structs);
 
     #[cfg(debug_assertions)]
