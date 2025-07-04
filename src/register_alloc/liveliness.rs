@@ -119,7 +119,7 @@ impl<'a> LivelinessContainer<'a> {
                     offset: _,
                     field_size: _,
                 } => {
-                    self.add_live(line, &SsaValue::Register(*target));
+                    self.remove_live(line, target);
                     self.add_live(line, source_ptr);
                 }
                 SsaInstruction::MemSet {
