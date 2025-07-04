@@ -49,3 +49,12 @@ impl Display for WithByteSize<Value> {
         }
     }
 }
+
+impl PartialEq<Register> for Value {
+    fn eq(&self, other: &Register) -> bool {
+        match self {
+            Value::Register(register) => register == other,
+            Value::Immediate(_) => false,
+        }
+    }
+}

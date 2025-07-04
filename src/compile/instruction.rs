@@ -180,6 +180,9 @@ impl<'a> Display for Instruction<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Instruction::Move { src, dst } => {
+                if src == dst {
+                    return Ok(())
+                }
                 let size = if src.is_immediate() {
                     ByteSize::B4
                 } else {
