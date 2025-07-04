@@ -15,8 +15,8 @@ impl<'a> Display for Type<'a> {
         match self {
             Type::Int => write!(f, "int"),
             Type::Bool => write!(f, "bool"),
-            Type::Struct(ident) => write!(f, "{}", ident),
-            Type::Pointer(ty) => write!(f, "*{}", ty),
+            Type::Struct(ident) => write!(f, "struct {}", ident),
+            Type::Pointer(ty) => write!(f, "{}*", ty),
             Type::Array(ty) => write!(f, "{}[]", ty),
             Type::NullPtr => write!(f, "NULL"),
         }
