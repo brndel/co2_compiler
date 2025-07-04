@@ -116,6 +116,12 @@ fn validate_statement<'src, Num>(
                 return;
             }
 
+            if lvalue.is_ptr() {
+                if let Err(err) = namespace.is_assigned(ident) {
+                    errors.push(err);
+                }
+            }
+
             if op.is_some() {
                 if let Err(err) = namespace.is_assigned(ident) {
                     errors.push(err);

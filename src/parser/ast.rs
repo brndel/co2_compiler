@@ -59,6 +59,15 @@ pub enum Lvalue<'a, Num = ValueNum> {
 }
 
 impl<'a, Num> Lvalue<'a, Num> {
+    pub fn is_ptr(&self) -> bool {
+        match self {
+            Lvalue::Ptr { .. } => true,
+            _ => false
+        }
+    }
+}
+
+impl<'a, Num> Lvalue<'a, Num> {
     pub fn ident(&self) -> Spanned<&'a str> {
         match self {
             Lvalue::Ident(ident) => *ident,
