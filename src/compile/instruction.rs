@@ -297,7 +297,7 @@ impl<'a> Display for Instruction<'a> {
                     writeln!(f, "mov {}, {}", condition, SystemRegister::Eax)?;
                     writeln!(f, "test {}, {}", SystemRegister::Eax, SystemRegister::Eax)?;
                 } else {
-                    writeln!(f, "test {}, {}", condition, condition)?;
+                    writeln!(f, "test {}, {}", Value::Immediate(1), condition)?;
                 }
                 writeln!(f, "jz {}", on_false)?;
                 write!(f, "jmp {}", on_true)
@@ -623,6 +623,19 @@ impl Display for WithByteSize<MoveInstr> {
             ByteSize::B2 => write!(f, "movw"),
             ByteSize::B4 => write!(f, "movl"),
             ByteSize::B8 => write!(f, "movq"),
+        }
+    }
+}
+#[derive(Clone, Copy)]
+struct MoveInstrExtendZero;
+
+
+impl Display for WithByteSize<MoveInstrExtendZero> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.size {
+            ByteSize::B1 => write!(f, "movzbl"),
+            ByteSize::B2 => write!(f, "movzwl"),
+            _ => unimplemented!()
         }
     }
 }
