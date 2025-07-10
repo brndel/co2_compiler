@@ -85,7 +85,7 @@ fn validate_statement<'src, Num>(
 
             if let Some(value) = value {
                 if let Some(value_ty) =
-                    validate_expression(errors, value, &namespace, functions, structs)
+                    validate_expression(errors, value, &namespace, functions, structs, false)
                 {
                     if !ty.0.can_assign(&value_ty.0) {
                         errors.push(SemanticError::MissmatchedType {
@@ -101,7 +101,7 @@ fn validate_statement<'src, Num>(
             }
         }
         Statement::Assignment { lvalue, op, value } => {
-            let value_ty = validate_expression(errors, value, &namespace, functions, structs);
+            let value_ty = validate_expression(errors, value, &namespace, functions, structs, false);
 
             let lvalue_ty = validate_lvalue(errors, lvalue, &namespace, functions, structs);
 
@@ -156,7 +156,7 @@ fn validate_statement<'src, Num>(
             r#else,
         } => {
             if let Some(condition_ty) =
-                validate_expression(errors, condition, &namespace, functions, structs)
+                validate_expression(errors, condition, &namespace, functions, structs, false)
             {
                 if condition_ty.0 != Type::Bool {
                     errors.push(SemanticError::MissmatchedType {
@@ -200,7 +200,7 @@ fn validate_statement<'src, Num>(
             body: then,
         } => {
             if let Some(condition_ty) =
-                validate_expression(errors, condition, &namespace, functions, structs)
+                validate_expression(errors, condition, &namespace, functions, structs, false)
             {
                 if condition_ty.0 != Type::Bool {
                     errors.push(SemanticError::MissmatchedType {
@@ -241,7 +241,7 @@ fn validate_statement<'src, Num>(
                 let local_vars = loop_namespace.local_assigned_variables().clone();
                 init_vars = Some(local_vars);
             }
-            validate_expression(errors, condition, &mut loop_namespace, functions, structs);
+            validate_expression(errors, condition, &mut loop_namespace, functions, structs, false);
 
             let mut inner = loop_namespace.new_child();
             validate_statement(
@@ -270,7 +270,7 @@ fn validate_statement<'src, Num>(
             }
         }
         Statement::Return { value: expr } => {
-            if let Some(expr_ty) = validate_expression(errors, expr, &namespace, functions, structs)
+            if let Some(expr_ty) = validate_expression(errors, expr, &namespace, functions, structs, false)
             {
                 let return_ty = current_function.return_type.0.clone();
                 if !return_ty.can_assign(&expr_ty.0) {
@@ -325,11 +325,16 @@ where
         } => {
             let ty = validate_lvalue(errors, &lvalue, namespace, functions, structs)?;
 
-            let (return_ty, hint) = validate_ptr(errors, namespace, functions, structs, ptr, ty)?;
+            let (access_ty, hint) = validate_ptr(errors, namespace, functions, structs, ptr, ty)?;
+
+            if access_ty.0.is_big_type() {
+                errors.push(SemanticError::DisallowedBigType { ty: access_ty });
+                return None;
+            }
 
             *size_hint.borrow_mut() = Some(hint);
 
-            Some(return_ty)
+            Some(access_ty)
         }
     }
 }
@@ -340,6 +345,7 @@ fn validate_expression<'src, Num>(
     namespace: &Namespace<'src, '_>,
     functions: &FunctionNamespace<'src>,
     structs: &StructNamespace<'src>,
+    inside_access: bool
 ) -> Option<Spanned<Type<'src>>>
 where
     Num: GetSpan,
@@ -363,8 +369,8 @@ where
         Expression::Num(value) => Some((Type::Int, value.span())),
         Expression::Bool(value) => Some((Type::Bool, value.span())),
         Expression::Binary { a, op, b } => {
-            let a_ty = validate_expression(errors, &a, namespace, functions, structs);
-            let b_ty = validate_expression(errors, &b, namespace, functions, structs);
+            let a_ty = validate_expression(errors, &a, namespace, functions, structs, false);
+            let b_ty = validate_expression(errors, &b, namespace, functions, structs, false);
 
             let a = a_ty?;
             let b = b_ty?;
@@ -397,7 +403,7 @@ where
             }
         }
         Expression::Unary { op, expr } => {
-            let ty = validate_expression(errors, expr, namespace, functions, structs)?;
+            let ty = validate_expression(errors, expr, namespace, functions, structs, false)?;
             match op.0 {
                 UnaryOperator::Minus | UnaryOperator::BitNot => {
                     if ty.0 == Type::Int {
@@ -425,9 +431,9 @@ where
         }
         Expression::Ternary { condition, a, b } => {
             let condition_ty =
-                validate_expression(errors, condition, namespace, functions, structs);
-            let a_ty = validate_expression(errors, a, namespace, functions, structs);
-            let b_ty = validate_expression(errors, b, namespace, functions, structs);
+                validate_expression(errors, condition, namespace, functions, structs, false);
+            let a_ty = validate_expression(errors, a, namespace, functions, structs, false);
+            let b_ty = validate_expression(errors, b, namespace, functions, structs, false);
 
             let condition = condition_ty?;
             let a = a_ty?;
@@ -455,13 +461,20 @@ where
             ptr,
             size_hint,
         } => {
-            let ty = validate_expression(errors, &expr, namespace, functions, structs)?;
+            let ty = validate_expression(errors, &expr, namespace, functions, structs, true)?;
 
-            let (return_ty, hint) = validate_ptr(errors, namespace, functions, structs, ptr, ty)?;
+            let (access_ty, hint) = validate_ptr(errors, namespace, functions, structs, ptr, ty)?;
+
+            if !inside_access {
+                if access_ty.0.is_big_type() {
+                    errors.push(SemanticError::DisallowedBigType { ty: access_ty });
+                    return None;
+                }
+            }
 
             *size_hint.borrow_mut() = Some(hint);
 
-            Some(return_ty)
+            Some(access_ty)
         }
     }
 }
@@ -535,7 +548,7 @@ where
             None
         }
         (Ptr::ArrayAccess { index }, Type::Array(inner_ty)) => {
-            let index_ty = validate_expression(errors, &index, namespace, functions, structs)?;
+            let index_ty = validate_expression(errors, &index, namespace, functions, structs, false)?;
 
             if index_ty.0 == Type::Int {
                 let inner_ty_size = structs.get_size(inner_ty);
@@ -560,10 +573,6 @@ where
             None
         }
         (Ptr::PtrDeref, Type::Pointer(inner_ty)) => {
-            if inner_ty.is_big_type() {
-                errors.push(SemanticError::DisallowedBigType { ty: ty.clone() });
-                return None;
-            }
             let size = structs.get_size(&inner_ty).byte_count;
             Some((
                 (inner_ty.as_ref().clone(), ty.1),
@@ -608,9 +617,8 @@ fn check_binary_type<'a>(
 
         return None;
     } else {
-        let nullptr_compare = {
-            a.0.is_ptr() && b.0.is_nullptr() || b.0.is_ptr() && a.0.is_nullptr()
-        };
+        let nullptr_compare =
+            { a.0.is_ptr() && b.0.is_nullptr() || b.0.is_ptr() && a.0.is_nullptr() };
 
         if a.0 != b.0 && !nullptr_compare {
             errors.push(SemanticError::MissmatchedBinaryType { a, b });
@@ -642,7 +650,7 @@ fn validate_function_call<'src, Num: GetSpan>(
             return Some((func.return_type(), ident.span()));
         }
         FunctionCall::AllocArray { len, .. } => {
-            let len = validate_expression(errors, &len, namespace, functions, structs);
+            let len = validate_expression(errors, &len, namespace, functions, structs, false);
 
             let Some(len) = len else {
                 return Some((func.return_type(), ident.span()));
@@ -671,7 +679,7 @@ fn validate_function_call<'src, Num: GetSpan>(
                     }
                 };
 
-                let ty = match validate_expression(errors, arg, namespace, functions, structs) {
+                let ty = match validate_expression(errors, arg, namespace, functions, structs, false) {
                     Some(ty) => ty,
                     None => continue,
                 };

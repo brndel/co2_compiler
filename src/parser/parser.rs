@@ -439,9 +439,6 @@ where
         > + Clone
         + 'token,
 {
-    let ptr_deref = just(Token::Operator(Operator::Mul))
-        .repeated()
-        .foldr(parser.clone(), |_, expr| (expr, Ptr::PtrDeref).into());
 
     let ident = select! {
         Token::Ident(ident) = e => (ident, e.span())
@@ -459,7 +456,7 @@ where
             index: Box::new(expr),
         });
 
-    let access = ptr_deref.foldl(
+    let access = parser.foldl(
         field_access
             .or(ptr_field_access)
             .or(array_access)
@@ -467,7 +464,12 @@ where
         |expr, ptr| (expr, ptr).into(),
     );
 
-    access
+
+    let ptr_deref = just(Token::Operator(Operator::Mul))
+        .repeated()
+        .foldr(access, |_, expr| (expr, Ptr::PtrDeref).into());
+
+    ptr_deref
 }
 
 pub fn parse_function_call<'token, 'src: 'token, I, T, U>(
