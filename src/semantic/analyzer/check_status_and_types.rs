@@ -273,7 +273,7 @@ fn validate_statement<'src, Num>(
             if let Some(expr_ty) = validate_expression(errors, expr, &namespace, functions, structs)
             {
                 let return_ty = current_function.return_type.0.clone();
-                if expr_ty.0 != return_ty {
+                if !return_ty.can_assign(&expr_ty.0) {
                     errors.push(SemanticError::MissmatchedType {
                         ty: expr_ty,
                         expected_type: return_ty,
