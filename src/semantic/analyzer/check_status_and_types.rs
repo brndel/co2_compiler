@@ -346,7 +346,7 @@ fn validate_expression<'src, Num>(
     namespace: &Namespace<'src, '_>,
     functions: &FunctionNamespace<'src>,
     structs: &StructNamespace<'src>,
-    inside_access: bool
+    allow_big_types: bool
 ) -> Option<Spanned<Type<'src>>>
 where
     Num: GetSpan,
@@ -433,8 +433,8 @@ where
         Expression::Ternary { condition, a, b } => {
             let condition_ty =
                 validate_expression(errors, condition, namespace, functions, structs, false);
-            let a_ty = validate_expression(errors, a, namespace, functions, structs, false);
-            let b_ty = validate_expression(errors, b, namespace, functions, structs, false);
+            let a_ty = validate_expression(errors, a, namespace, functions, structs, allow_big_types);
+            let b_ty = validate_expression(errors, b, namespace, functions, structs, allow_big_types);
 
             let condition = condition_ty?;
             let a = a_ty?;
@@ -466,7 +466,7 @@ where
 
             let (access_ty, hint) = validate_ptr(errors, namespace, functions, structs, ptr, ty)?;
 
-            if !inside_access {
+            if !allow_big_types {
                 if access_ty.0.is_big_type() {
                     errors.push(SemanticError::DisallowedBigType { ty: access_ty });
                     return None;
