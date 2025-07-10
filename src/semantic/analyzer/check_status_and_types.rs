@@ -109,6 +109,12 @@ fn validate_statement<'src, Num>(
                 return;
             };
 
+
+            if lvalue_ty.0.is_big_type() {
+                errors.push(SemanticError::DisallowedBigType { ty: lvalue_ty });
+                return;
+            }
+
             let ident = lvalue.ident();
 
             if lvalue_ty.0.is_big_type() {
@@ -326,11 +332,6 @@ where
             let ty = validate_lvalue(errors, &lvalue, namespace, functions, structs)?;
 
             let (access_ty, hint) = validate_ptr(errors, namespace, functions, structs, ptr, ty)?;
-
-            if access_ty.0.is_big_type() {
-                errors.push(SemanticError::DisallowedBigType { ty: access_ty });
-                return None;
-            }
 
             *size_hint.borrow_mut() = Some(hint);
 
