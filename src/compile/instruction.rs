@@ -533,7 +533,7 @@ impl<'a> Display for Instruction<'a> {
                 writeln!(
                     f,
                     "{} {}({}), {}",
-                    MoveInstr.with_size(*field_size),
+                    MoveInstrExtendZero.with_size(*field_size),
                     offset,
                     source_ptr.with_size(ByteSize::B8),
                     target.with_size(*field_size)
@@ -658,7 +658,8 @@ impl Display for WithByteSize<MoveInstrExtendZero> {
         match self.size {
             ByteSize::B1 => write!(f, "movzbl"),
             ByteSize::B2 => write!(f, "movzwl"),
-            _ => unimplemented!(),
+            ByteSize::B4 => write!(f, "movl"),
+            ByteSize::B8 => write!(f, "movq"),
         }
     }
 }
