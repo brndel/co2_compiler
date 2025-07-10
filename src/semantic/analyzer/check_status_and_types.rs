@@ -560,6 +560,10 @@ where
             None
         }
         (Ptr::PtrDeref, Type::Pointer(inner_ty)) => {
+            if inner_ty.is_big_type() {
+                errors.push(SemanticError::DisallowedBigType { ty: ty.clone() });
+                return None;
+            }
             let size = structs.get_size(&inner_ty).byte_count;
             Some((
                 (inner_ty.as_ref().clone(), ty.1),
