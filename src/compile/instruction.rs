@@ -536,7 +536,7 @@ impl<'a> Display for Instruction<'a> {
                     MoveInstrExtendZero.with_size(*field_size),
                     offset,
                     source_ptr.with_size(ByteSize::B8),
-                    target.with_size(*field_size)
+                    target.with_size(extended_byte_size(*field_size))
                 )?;
 
                 if is_stack {
@@ -661,5 +661,14 @@ impl Display for WithByteSize<MoveInstrExtendZero> {
             ByteSize::B4 => write!(f, "movl"),
             ByteSize::B8 => write!(f, "movq"),
         }
+    }
+}
+
+fn extended_byte_size(size: ByteSize) -> ByteSize {
+    match size {
+        ByteSize::B1 => ByteSize::B4,
+        ByteSize::B2 => ByteSize::B4,
+        ByteSize::B4 => ByteSize::B4,
+        ByteSize::B8 => ByteSize::B8,
     }
 }
