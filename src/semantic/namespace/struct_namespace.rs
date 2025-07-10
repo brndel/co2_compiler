@@ -46,14 +46,20 @@ pub enum StructStatus<'a, 'src> {
 impl<'a, 'src> StructNamespace<'src, StructStatus<'a, 'src>> {
     pub fn new<Num>(
         program: &'a Program<'src, Num>,
+        errors: &mut Vec<SemanticError<'src>>,
     ) -> StructNamespace<'src, StructStatus<'a, 'src>> {
         let mut this = StructNamespace {
             structs: BTreeMap::new(),
         };
 
         for def in program.structs() {
-            this.structs
-                .insert(def.ident.0, StructStatus::Registered { def });
+            if let Some(previous) = this.structs
+                .insert(def.ident.0, StructStatus::Registered { def }) {
+                    let StructStatus::Registered { def: prev } = previous else {
+                        panic!()
+                    };
+                    errors.push(SemanticError::StructAlreadyDefined { ident: def.ident, defined_at: prev.ident.1 });
+                }
         }
 
         this

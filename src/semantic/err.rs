@@ -64,6 +64,10 @@ pub enum SemanticError<'a> {
     MainFnWithParams {
         ident: Spanned<&'a str>,
     },
+    StructAlreadyDefined {
+        ident: Spanned<&'a str>,
+        defined_at: SimpleSpan,
+    },
     UnknownStruct {
         ident: Spanned<&'a str>,
     },
@@ -133,6 +137,10 @@ impl<'a> SemanticError<'a> {
             } => call_ident.1,
             SemanticError::NoMainFunction => SimpleSpan::splat(0),
             SemanticError::MainFnWithParams { ident } => ident.1,
+            SemanticError::StructAlreadyDefined {
+                ident,
+                defined_at: _,
+            } => ident.1,
             SemanticError::UnknownStruct { ident } => ident.1,
             SemanticError::RecursiveStruct { ident } => ident.1,
             SemanticError::UnkownField {
@@ -211,6 +219,10 @@ impl<'a> SemanticError<'a> {
             SemanticError::MainFnWithParams { ident: _ } => {
                 format!("Main function is not allowed to have parameters")
             }
+            SemanticError::StructAlreadyDefined {
+                ident,
+                defined_at: _,
+            } => format!("Struct '{}' already defined", ident.0),
             SemanticError::UnknownStruct { ident } => {
                 format!("Unkown struct '{}'", ident.0)
             }
@@ -312,6 +324,13 @@ impl<'a> SemanticError<'a> {
             SemanticError::NoMainFunction => vec![],
             SemanticError::MainFnWithParams { ident } => {
                 vec![Label::new(source.span(&ident.1)).with_message(self.message())]
+            }
+            SemanticError::StructAlreadyDefined { ident, defined_at } => {
+                vec![
+                    self.default_label(source),
+                    Label::new(source.span(defined_at))
+                        .with_message(format!("Struct '{}' first defined here", ident.0)),
+                ]
             }
             SemanticError::UnknownStruct { ident } => {
                 vec![Label::new(source.span(&ident.1)).with_message(self.message())]
